@@ -132,6 +132,7 @@ export default class DragnTileExtension extends Extension {
         DND.addDragMonitor(this._dragMonitor);
 
         this._tilePreview = new WM.TilePreview();
+        this._open = false;
     }
 
     disable() {
@@ -183,14 +184,9 @@ export default class DragnTileExtension extends Extension {
                 const rightbottom = new Graphene.Point3D({x: windowPreview.get_width(), y: windowPreview.get_height()});
                 // translate to screen coordinate
                 let {x: left, y: top} = windowPreview.apply_transform_to_point(topleft);
-                let {x: right, y: bottom} = windowPreview._delegate.apply_transform_to_point(rightbottom)
+                let {x: right, y: bottom} = windowPreview.apply_transform_to_point(rightbottom)
 
                 if (left < event.x && event.x < right && top < event.y && event.y < bottom) {
-                    // const dstBound = new Mtk.Rectangle({
-                    //     x: left,
-                    //     y: top,
-                    //     width: (right - left) / 2,
-                    //     height: (bottom - top) / 2});
                     const dstBound = new Mtk.Rectangle({
                         x: left,
                         y: top,
@@ -199,14 +195,20 @@ export default class DragnTileExtension extends Extension {
                     let target = event.targetActor;
                     while (target) {
                         if (target._delegate && target._delegate.metaWindow) {
-                            console.error('DragnTileExtension.dstBound ', dstBound, '{', dstBound.width, dstBound.height, '}');
-                            this._tilePreview.open(target._delegate.metaWindow, dstBound, monitor);
-                            //this._tilePreview.open(target, dstBound, monitor);
+                            target.queue_redraw();
+                            console.error('DragnTileExtension.queue_redraw: ', target.get_name());
+                            if (!this._open) {
+                                console.error('DragnTileExtension.dstBound ', dstBound, '{', dstBound.width, dstBound.height, '}');
+                                this._tilePreview.open(target, dstBound, monitor);
+                                this._open = true;
+                                break;
+                            }
                         }
                         target = target.get_parent();
                     }
                 } else {
                     this._tilePreview.close();
+                    this._open = false;
                 }
 
             }
