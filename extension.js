@@ -30,98 +30,7 @@ import {WindowPreview} from 'resource:///org/gnome/shell/ui/windowPreview.js';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// const TilePreview = GObject.registerClass(
-// class TilePreview extends St.Widget {
-//     _init() {
-//         super._init();
-//         global.window_group.add_child(this);
-
-//         this._reset();
-//         this._showing = false;
-//     }
-
-//     open(window, tileRect, monitorIndex) {
-//         let windowActor = window.get_compositor_private();
-//         //let windowActor = window;
-//         if (!windowActor)
-//             return;
-
-
-//         global.window_group.set_child_below_sibling(this, windowActor);
-//         //Main.overview._overview.set_child_below_sibling(this, windowActor);
-//         //windowActor.set_child_below_sibling(this, windowActor);
-
-//         if (this._rect && this._rect.equal(tileRect))
-//             return;
-
-//         let changeMonitor = this._monitorIndex === -1 ||
-//                              this._monitorIndex !== monitorIndex;
-
-//         this._monitorIndex = monitorIndex;
-//         this._rect = tileRect;
-
-//         let monitor = Main.layoutManager.monitors[monitorIndex];
-
-//         this._updateStyle(monitor);
-
-//         if (!this._showing || changeMonitor) {
-//             const monitorRect = new Mtk.Rectangle({
-//                 x: monitor.x,
-//                 y: monitor.y,
-//                 width: monitor.width,
-//                 height: monitor.height,
-//             });
-//             let [, rect] = window.get_frame_rect().intersect(monitorRect);
-//             this.set_size(rect.width, rect.height);
-//             this.set_position(rect.x, rect.y);
-//             this.opacity = 0;
-//         }
-
-//         this._showing = true;
-//         this.show();
-//         this.ease({
-//             x: tileRect.x,
-//             y: tileRect.y,
-//             width: tileRect.width,
-//             height: tileRect.height,
-//             opacity: 255,
-//             duration: WINDOW_ANIMATION_TIME,
-//             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-//         });
-//     }
-
-//     close() {
-//         if (!this._showing)
-//             return;
-
-//         this._showing = false;
-//         this.ease({
-//             opacity: 0,
-//             duration: WINDOW_ANIMATION_TIME,
-//             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-//             onComplete: () => this._reset(),
-//         });
-//     }
-
-//     _reset() {
-//         this.hide();
-//         this._rect = null;
-//         this._monitorIndex = -1;
-//     }
-
-//     _updateStyle(monitor) {
-//         let styles = ['tile-preview'];
-//         if (this._monitorIndex === Main.layoutManager.primaryIndex)
-//             styles.push('on-primary');
-//         if (this._rect.x === monitor.x)
-//             styles.push('tile-preview-left');
-//         if (this._rect.x + this._rect.width === monitor.x + monitor.width)
-//             styles.push('tile-preview-right');
-
-//         this.style_class = styles.join(' ');
-//     }
-// });
-
+const WINDOW_ANIMATION_TIME = 250;
 
 export default class DragnTileExtension extends Extension {
     enable() {
@@ -131,8 +40,11 @@ export default class DragnTileExtension extends Extension {
         };
         DND.addDragMonitor(this._dragMonitor);
 
-        this._tilePreview = new WM.TilePreview();
-        this._open = false;
+        this._tileTip = new St.Widget({
+            name: 'DragnTileTip',
+            style_class: 'tile-preview on-primary',
+        });
+        this._showingTip = false;
     }
 
     disable() {
@@ -141,6 +53,10 @@ export default class DragnTileExtension extends Extension {
 
     _onDragDrop(event) {
         console.error('DragnTileExtension._onDragDrop');
+        // if (this._open) {
+        //     this._tilePreview.close();
+        //     this._open = false;
+        // }
         // let id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
         // });
         // GLib.Source.set_name_by_id(id, '[gnome-shell] extension.dragNtile');
@@ -151,19 +67,19 @@ export default class DragnTileExtension extends Extension {
             if (target._delegate && target._delegate._getCaption && source._delegate && source._delegate._getCaption) {
                 console.error('DragnTileExtension.upon-app ', source._delegate._getCaption(), ' on ', target._delegate._getCaption());
 
-                // let monitor = target.metaWindow.get_monitor();
-                // let workspace = target.metaWindow.get_workspace();
-                // let monitorWorkArea = workspace.get_work_area_for_monitor(monitor);
+                let monitor = target.metaWindow.get_monitor();
+                let workspace = target.metaWindow.get_workspace();
+                let monitorWorkArea = workspace.get_work_area_for_monitor(monitor);
 
-                // target._activate();
-                // target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                // target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
-                // target.metaWindow.move_resize_frame(false, monitorWorkArea.width/2, 0, monitorWorkArea.width/2, monitorWorkArea.height);
+                target._activate();
+                target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+                target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+                target.metaWindow.move_resize_frame(false, monitorWorkArea.width/2, 0, monitorWorkArea.width/2, monitorWorkArea.height);
 
-                // source._activate();
-                // source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                // source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
-                // source.metaWindow.move_resize_frame(false, 0, 0, monitorWorkArea.width/2, monitorWorkArea.height);
+                source._activate();
+                source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+                source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+                source.metaWindow.move_resize_frame(false, 0, 0, monitorWorkArea.width/2, monitorWorkArea.height);
 
                 break;
             }
@@ -194,27 +110,50 @@ export default class DragnTileExtension extends Extension {
                         height: (bottom - top)});
                     let target = event.targetActor;
                     while (target) {
+                        //if (target instanceof WindowPreview && target._delegate.metaWindow) {
                         if (target._delegate && target._delegate.metaWindow) {
-                            target.queue_redraw();
                             console.error('DragnTileExtension.queue_redraw: ', target.get_name());
-                            if (!this._open) {
-                                console.error('DragnTileExtension.dstBound ', dstBound, '{', dstBound.width, dstBound.height, '}');
-                                this._tilePreview.open(target, dstBound, monitor);
-                                this._open = true;
+                            target.queue_redraw();
+                            if (!this._showingTip) {
+                                console.error('DragnTileExtension.add_child parent:', target.get_name(), ' child:', this._tileTip.get_name());
+                                target.add_child(this._tileTip);
+                                target.set_child_above_sibling(this._tileTip, null);
+
+                                this._tileTip.set_size(target.get_width(), target.get_height());
+                                this._tileTip.set_position(target.get_x(), target.get_y());
+                                this._tileTip.opacity = 0;
+
+                                this._tileTip.show();
+                                this._tileTip.ease({
+                                    x: dstBound.x,
+                                    y: dstBound.y,
+                                    width: dstBound.width,
+                                    height: dstBound.height,
+                                    opacity: 255,
+                                    duration: WINDOW_ANIMATION_TIME,
+                                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                                });
+                                console.error('DragnTileExtension.ease x:', dstBound.x, ' y:', dstBound.y,
+                                    ' w:', dstBound.width, ' h:', dstBound.height);
+                                console.error('DragnTileExtension.ease');
+                                console.error('DragnTileExtension.ease');
+                                console.error('DragnTileExtension.ease');
+                                console.error('DragnTileExtension.ease');
+
+                                this._showingTip = true;
                                 break;
                             }
                         }
                         target = target.get_parent();
                     }
                 } else {
-                    this._tilePreview.close();
-                    this._open = false;
+                    this._tileTip.hide();
+                    this._showingTip = false;
                 }
 
             }
         });
 
-        //console.error('DragnTileExtension._onDragMotion x ');
         // always listen dragmotion event
         return DND.DragDropResult.CONTINUE;
     }
