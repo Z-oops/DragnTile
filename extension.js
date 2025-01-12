@@ -40,10 +40,7 @@ export default class DragnTileExtension extends Extension {
         };
         DND.addDragMonitor(this._dragMonitor);
 
-        this._tileTip = new St.Widget({
-            name: 'DragnTileTip',
-            style_class: 'tile-preview on-primary',
-        });
+        this._tileTip = null;
         this._showingTip = false;
     }
 
@@ -92,7 +89,6 @@ export default class DragnTileExtension extends Extension {
     _onDragMotion(event) {
         console.error('DragnTileExtension._onDragMotion x ', event.x, ' y ', event.y);
         let source = event.source;
-        let monitor = source.metaWindow.get_monitor();
 
         source._workspace._windows.forEach((windowPreview, actor) => {
             if (windowPreview instanceof WindowPreview && windowPreview !== source) {
@@ -110,19 +106,22 @@ export default class DragnTileExtension extends Extension {
                         height: (bottom - top)});
                     let target = event.targetActor;
                     while (target) {
-                        //if (target instanceof WindowPreview && target._delegate.metaWindow) {
-                        if (target._delegate && target._delegate.metaWindow) {
+                        if (target instanceof WindowPreview && target._delegate.metaWindow && target !== source) {
                             console.error('DragnTileExtension.queue_redraw: ', target.get_name());
-                            target.queue_redraw();
                             if (!this._showingTip) {
+                                this._tileTip = new St.Widget({
+                                    name: 'DragnTileTip',
+                                    style_class: 'tile-preview',
+                                    x: target.get_x(),
+                                    y: target.get_y(),
+                                    width: target.get_width(),
+                                    height: target.get_height(),
+                                    opacity: 0,
+                                });
                                 console.error('DragnTileExtension.add_child parent:', target.get_name(), ' child:', this._tileTip.get_name());
+
                                 target.add_child(this._tileTip);
-                                target.set_child_above_sibling(this._tileTip, null);
-
-                                this._tileTip.set_size(target.get_width(), target.get_height());
-                                this._tileTip.set_position(target.get_x(), target.get_y());
-                                this._tileTip.opacity = 0;
-
+                                //target.set_child_above_sibling(this._tileTip, null);
                                 this._tileTip.show();
                                 this._tileTip.ease({
                                     x: dstBound.x,
@@ -147,8 +146,10 @@ export default class DragnTileExtension extends Extension {
                         target = target.get_parent();
                     }
                 } else {
-                    this._tileTip.hide();
-                    this._showingTip = false;
+                    if (this._showingTip) {
+                        this._tileTip.hide();
+                        this._showingTip = false;
+                    }
                 }
 
             }
