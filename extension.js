@@ -106,8 +106,8 @@ export default class DragnTileExtension extends Extension {
                         height: (bottom - top)});
                     let target = event.targetActor;
                     while (target) {
-                        if (target instanceof WindowPreview && target._delegate.metaWindow && target !== source) {
-                            console.error('DragnTileExtension.queue_redraw: ', target.get_name());
+                        if (target instanceof WindowPreview && target !== source) {
+                            console.error('DragnTileExtension.target: ', target.get_name());
                             if (!this._showingTip) {
                                 this._tileTip = new St.Widget({
                                     name: 'DragnTileTip',
