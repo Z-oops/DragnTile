@@ -50,10 +50,11 @@ export default class DragnTileExtension extends Extension {
 
     _onDragDrop(event) {
         console.error('DragnTileExtension._onDragDrop');
-        // if (this._open) {
-        //     this._tilePreview.close();
-        //     this._open = false;
-        // }
+        if (this._showingTip && this._tileTip) {
+            this._tileTip.hide();
+            this._showingTip = false;
+        }
+
         // let id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
         // });
         // GLib.Source.set_name_by_id(id, '[gnome-shell] extension.dragNtile');
@@ -90,6 +91,7 @@ export default class DragnTileExtension extends Extension {
         console.error('DragnTileExtension._onDragMotion x ', event.x, ' y ', event.y);
         let source = event.source;
 
+        let showTip = false;
         source._workspace._windows.forEach((windowPreview, actor) => {
             if (windowPreview instanceof WindowPreview && windowPreview !== source) {
                 const topleft = new Graphene.Point3D({x: 0, y: 0});
@@ -98,7 +100,11 @@ export default class DragnTileExtension extends Extension {
                 let {x: left, y: top} = windowPreview.apply_transform_to_point(topleft);
                 let {x: right, y: bottom} = windowPreview.apply_transform_to_point(rightbottom)
 
+                console.error('DragnTileExtension.drag: source', source.get_name(), event.x, event.y, 'window', windowPreview.get_name(), left, top, right, bottom);
+
+
                 if (left < event.x && event.x < right && top < event.y && event.y < bottom) {
+                    showTip = true;
                     const dstBound = new Mtk.Rectangle({
                         x: left,
                         y: top,
@@ -145,15 +151,14 @@ export default class DragnTileExtension extends Extension {
                         }
                         target = target.get_parent();
                     }
-                } else {
-                    if (this._showingTip) {
-                        this._tileTip.hide();
-                        this._showingTip = false;
-                    }
                 }
 
             }
         });
+        if (!showTip && this._showingTip) {
+            this._tileTip.hide();
+            this._showingTip = false;
+        }
 
         // always listen dragmotion event
         return DND.DragDropResult.CONTINUE;
