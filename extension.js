@@ -98,7 +98,7 @@ export default class DragnTileExtension extends Extension {
                 const rightbottom = new Graphene.Point3D({x: windowPreview.get_width(), y: windowPreview.get_height()});
                 // translate to screen coordinate
                 let {x: left, y: top} = windowPreview.apply_transform_to_point(topleft);
-                let {x: right, y: bottom} = windowPreview.apply_transform_to_point(rightbottom)
+                let {x: right, y: bottom} = windowPreview.apply_transform_to_point(rightbottom);
 
                 console.error('DragnTileExtension.drag: source', source.get_name(), event.x, event.y, 'window', windowPreview.get_name(), left, top, right, bottom);
 
@@ -126,8 +126,13 @@ export default class DragnTileExtension extends Extension {
                                 });
                                 console.error('DragnTileExtension.add_child parent:', target.get_name(), ' child:', this._tileTip.get_name());
 
-                                target.add_child(this._tileTip);
-                                //target.set_child_above_sibling(this._tileTip, null);
+                                Main.uiGroup.add_child(this._tileTip);
+                                Main.uiGroup.set_child_above_sibling(this._tileTip, null);
+                                // put dnd on top of tileTip
+                                if (source._draggable && source._draggable._dragActor) {
+                                    Main.uiGroup.set_child_above_sibling(source._draggable._dragActor, null);
+                                }
+
                                 this._tileTip.show();
                                 this._tileTip.ease({
                                     x: dstBound.x,
@@ -140,10 +145,10 @@ export default class DragnTileExtension extends Extension {
                                 });
                                 console.error('DragnTileExtension.ease x:', dstBound.x, ' y:', dstBound.y,
                                     ' w:', dstBound.width, ' h:', dstBound.height);
-                                console.error('DragnTileExtension.ease');
-                                console.error('DragnTileExtension.ease');
-                                console.error('DragnTileExtension.ease');
-                                console.error('DragnTileExtension.ease');
+                                // console.error('DragnTileExtension.ease');
+                                // console.error('DragnTileExtension.ease');
+                                // console.error('DragnTileExtension.ease');
+                                // console.error('DragnTileExtension.ease');
 
                                 this._showingTip = true;
                                 break;
