@@ -46,10 +46,21 @@ export default class DragnTileExtension extends Extension {
 
         this._source = undefined;
         this._target = undefined;
+
+        // Create a new GSettings object
+        this._settings = this.getSettings();
+        this._debug = this._settings.get_value('debug');
+
+        // Watch for changes to a specific setting
+        this._settings.connect('changed::debug', (settings, key) => {
+            this._debug = settings.get_value(key);
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
     }
 
     disable() {
         DND.removeDragMonitor(this._dragMonitor);
+        this._settings = null;
     }
 
     _onDragDrop(event) {
@@ -63,7 +74,8 @@ export default class DragnTileExtension extends Extension {
         // GLib.Source.set_name_by_id(id, '[gnome-shell] extension.dragNtile');
 
         if (this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
-            console.debug('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
+            if (this._debug.get_boolean())
+                console.log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
 
             let monitor = this._target.metaWindow.get_monitor();
             let workspace = this._target.metaWindow.get_workspace();
@@ -103,9 +115,7 @@ export default class DragnTileExtension extends Extension {
     }
 
     _onDragMotion(event) {
-        console.debug('DragnTileExtension._onDragMotion x ', event.x, ' y ', event.y, event.targetActor.get_name());
         let source = event.source;
-
         // if drag point intersects any WindowPreview
         // TODO: maybe peek actors at point?
         let quadrant = -1;
@@ -116,9 +126,12 @@ export default class DragnTileExtension extends Extension {
                 // translate to screen coordinate
                 let {x: left, y: top} = window.apply_transform_to_point(topleft);
                 let {x: right, y: bottom} = window.apply_transform_to_point(rightbottom);
-
                 quadrant = this._getQuadrant({x1: left, y1: top, x2: right, y2: bottom}, {x: event.x, y: event.y});
-                console.debug('DragnTileExtension.drag: source', source.get_name(), event.x, event.y, 'window', window.get_name(), left, top, right, bottom, quadrant);
+                if (this._debug.get_boolean())
+                    console.log('DragnTileExtension.drag', source.get_name(),
+                        ', point', event.x, event.y, ', quadrant', quadrant,
+                        ', previewWindow', window.get_name(), left, top, right, bottom);
+
                 if (quadrant != -1) {
                     this._source = source;
                     this._target = window;
@@ -129,7 +142,8 @@ export default class DragnTileExtension extends Extension {
 
         }
 
-        console.error('DragnTileExtension.drag: quadrant', this._quadrant, quadrant);
+        if (this._debug.get_boolean())
+            console.log('DragnTileExtension.drag quadrant', this._quadrant, quadrant);
         if (this._quadrant != quadrant) {
             this._quadrant = quadrant;
             if (this._quadrant != -1) {
@@ -155,11 +169,11 @@ export default class DragnTileExtension extends Extension {
                         width: (right - left) / 2,
                         height: (bottom - top)});
                 }
-                console.debug('DragnTileExtension.drag: dst', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
+                if (this._debug.get_boolean())
+                    console.log('DragnTileExtension.drag: dst', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
 
                 while (target) {
                     if (target instanceof WindowPreview && target !== source) {
-                        console.error('DragnTileExtension.target: ', target.get_name());
                         if (this._tileTip) {
                             this._tileTip.hide();
                         }
@@ -190,8 +204,7 @@ export default class DragnTileExtension extends Extension {
                             duration: WINDOW_ANIMATION_TIME,
                             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                         });
-                        console.debug('DragnTileExtension.ease x:', dstBound.x, ' y:', dstBound.y,
-                            ' w:', dstBound.width, ' h:', dstBound.height);
+                        console.log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
 
                         this._showingTip = true;
                         break;

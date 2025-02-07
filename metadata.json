@@ -1,8 +1,9 @@
 {
-  "name": "dragNtile",
-  "description": "dragNtile",
-  "uuid": "luozengcn@gmail.com",
+  "name": "DragnTile",
+  "description": "DragnTile",
+  "uuid": "DragnTile@luozengcn.gmail.com",
   "shell-version": [
     "47"
-  ]
+  ],
+  "settings-schema": "org.gnome.shell.extensions.DragnTile"
 }
