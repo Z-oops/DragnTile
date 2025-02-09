@@ -1,6 +1,6 @@
 # DragnTile
 An extension for GNOME Shell that helps to split screen in an easy way.
-![split screen](./assets/split screen.gif)
+![split screen](https://github.com/Z-oops/DragnTile/blob/main/assets/split%20screen.gif)
 
 # Install
 ```shell
