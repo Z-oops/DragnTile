@@ -7,16 +7,16 @@ An extension for GNOME Shell that helps to split screen in an easy way.
 git clone https://github.com/Z-oops/DragnTile.git
 cd DragnTile
 zip DragnTile@luozengcn.gmail.com.zip -r * -x assets
-gnome-extensions install DragnTile@luozengcn.gmail.com.zip 
+gnome-extensions install DragnTile@luozengcn.gmail.com.zip
 ```
 
 # Planning
 1. Add to https://extensions.gnome.org/
-2. Support split vertically.
-3. Support recording tiling operations and restoring them 
+2. Support recording tiling operations and restoring them
+3. Restore window position and size after split quited
 
 # Issue report
-Open extention settings and switch `debug` on. Reproduce the issue and provide log with journalctrl.
+Open extention settings and switch `debug` on. Reproduce the issue and provide log with journalctl.
 ```shell
-journalctrl -S today > issue
+journalctl -S today > issue
 ```
