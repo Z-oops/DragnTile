@@ -32,6 +32,15 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
 
+// qudrant_0  | quadrant_1
+//------------------------
+// qudrant_3  | quadrant_2
+const QUAD_0 = 0;
+const QUAD_1 = 1;
+const QUAD_2 = 2;
+const QUAD_3 = 3;
+const QUAD_NONE = -1;  // a point doesn't intersect with area
+
 export default class DragnTileExtension extends Extension {
     enable() {
         this._dragMonitor = {
@@ -40,13 +49,18 @@ export default class DragnTileExtension extends Extension {
         };
         DND.addDragMonitor(this._dragMonitor);
 
-        this._tileTip = null;
-        this._quadrant = -1;
+        this._tileTip = new St.Widget({
+            name: 'DragnTileTip',
+            style_class: 'tile-preview',
+            opacity: 0,
+        });
+
+        this._quadrant = QUAD_NONE;
         this._tile = 'none';
         this._nextTile = 'none';
 
-        this._source = undefined;
-        this._target = undefined;
+        this._source = null;
+        this._target = null;
 
         // Create a new GSettings object
         this._settings = this.getSettings();
@@ -61,78 +75,56 @@ export default class DragnTileExtension extends Extension {
 
     disable() {
         DND.removeDragMonitor(this._dragMonitor);
+        this._dragMonitor = undefined;
         this._settings = null;
+
+        this._tileTip?.destroy();
+        this._tileTip = null;
+
+        this._source = null;
+        this._target = null;
     }
 
     _onDragDrop(event) {
-        if (this._tileTip) {
-            this._tileTip.hide();
-            this._nextTile = 'none';
-        }
-
-        // let id = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-        // });
-        // GLib.Source.set_name_by_id(id, '[gnome-shell] extension.dragNtile');
-
-        if (this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
-            if (this._debug.get_boolean())
-                console.log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
+        if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
+            this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
 
             let monitor = this._target.metaWindow.get_monitor();
             let workspace = this._target.metaWindow.get_workspace();
             let monitorWorkArea = workspace.get_work_area_for_monitor(monitor);
 
-            console.log('monitorWorkArea', monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height);
+            this._target._activate();
+            this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+            this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
 
-            if (this._tile == 'SLTR') {
-                // source | target
-                this._target._activate();
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            this._source._activate();
+            this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+            this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            if (this._tile === 'SLTR') {
+                // source left target right
                 this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-
-                this._source._activate();
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
                 this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-            } else if (this._tile == 'TLSR') {
-                // target | source
-                this._target._activate();
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            } else if (this._tile === 'TLSR') {
                 this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-
-                this._source._activate();
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
                 this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-            } else if (this._tile == 'STTB') {
-                this._target._activate();
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            } else if (this._tile === 'STTB') {
+                // source top target bottom
                 this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
-
-                this._source._activate();
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
                 this._source.metaWindow.move_resize_frame(false, 0, 0, monitorWorkArea.width, monitorWorkArea.height/2);
-            } else if (this._tile == 'TTSB') {
-                this._target._activate();
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            } else if (this._tile === 'TTSB') {
                 this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2);
-
-                this._source._activate();
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
                 this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
             }
-
-            // release window resource
-            this._source = undefined;
-            this._target = undefined;
         }
 
+        // clear extension states when drag and drop
+        this._tileTip?.hide();
+        this._nextTile = 'none';
+        this._tile = 'none';
+        this._quadrant = QUAD_NONE;
+        // release window resource
+        this._source = null;
+        this._target = null;
         return DND.DragDropResult.CONTINUE;
     }
 
@@ -140,47 +132,20 @@ export default class DragnTileExtension extends Extension {
         let source = event.source;
         // if drag point intersects any WindowPreview
         let {quad: quadrant, preview: windowpreview} = this._getQuadrant(source._workspace, event);
-        if (this._quadrant == -1 && quadrant == 0) {
-            this._nextTile = 'SLTR';                         // source left target right
-        } else if (this._quadrant == -1 && quadrant == 1) {
-            this._nextTile = 'TLSR';
-        } else if (this._quadrant == -1 && quadrant == 2) {
-            this._nextTile = 'TLSR';
-        } else if (this._quadrant == -1 && quadrant == 3) {
-            this._nextTile = 'SLTR';
-        } else if (this._quadrant == 0 && quadrant == 1) {
-            this._nextTile = 'TLSR';
-        } else if (this._quadrant == 1 && quadrant == 2) {
-            this._nextTile = 'TTSB';                         // target top source bottom
-        } else if (this._quadrant == 2 && quadrant == 3) {
-            this._nextTile = 'SLTR';
-        } else if (this._quadrant == 3 && quadrant == 0) {
-            this._nextTile = 'STTB';
-        } else if (this._quadrant == 0 && quadrant == 3) {
-            this._nextTile = 'TTSB';
-        } else if (this._quadrant == 3 && quadrant == 2) {
-            this._nextTile = 'TLSR';
-        } else if (this._quadrant == 2 && quadrant == 1) {
-            this._nextTile = 'STTB';
-        } else if (this._quadrant == 1 && quadrant == 0) {
-            this._nextTile = 'SLTR';
-        } else if (this._quadrant != quadrant) {
-            this._nextTile = 'none';
-        }
+        this._nextTile = this._getTileMode(quadrant, this._quadrant);
         this._quadrant = quadrant;
 
-        if (this._nextTile != 'none') {
+        if (this._nextTile !== 'none') {
             this._source = source;
             this._target = windowpreview;
         } else {
             this._tile = this._nextTile;
             this._tileTip?.hide();
         }
-        if (this._debug.get_boolean())
-            console.log('DragnTileExtension.drag', source.get_name(),
-                ', point', event.x, event.y, ', quadrant', quadrant,
-                ', Preview', windowpreview?.get_name(),
-                ', tilemode', this._nextTile);
+        this._log('DragnTileExtension.drag', source.get_name(),
+            ', point', event.x, event.y, ', quadrant', quadrant,
+            ', Preview', windowpreview?.get_name(),
+            ', tilemode', this._nextTile);
 
 
         if (this._nextTile !== this._tile) {
@@ -196,50 +161,41 @@ export default class DragnTileExtension extends Extension {
             let {x: left, y: top} = target.apply_transform_to_point(topleft);
             let {x: right, y: bottom} = target.apply_transform_to_point(rightbottom);
 
-            if (this._nextTile == 'SLTR') {
+            if (this._nextTile === 'SLTR') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top,
                     width: (right - left) / 2,
                     height: (bottom - top)});
-            } else if (this._nextTile == 'TLSR') {
+            } else if (this._nextTile === 'TLSR') {
                 dstBound = new Mtk.Rectangle({
                     x: left + (right - left) / 2,
                     y: top,
                     width: (right - left) / 2,
                     height: (bottom - top)});
-            } else if (this._nextTile == 'STTB') {
+            } else if (this._nextTile === 'STTB') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top,
                     width: (right - left),
                     height: (bottom - top) / 2});
-            } else if (this._nextTile == 'TTSB') {
+            } else if (this._nextTile === 'TTSB') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top + (bottom - top) / 2,
                     width: (right - left),
                     height: (bottom - top) / 2});
             }
+            this._log('DragnTileExtension.drag: dst', dstBound?.x, dstBound?.y, dstBound?.width, dstBound?.height);
 
-            if (this._debug.get_boolean())
-                console.log('DragnTileExtension.drag: dst', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
-
-            while (target) {
+            while (target && dstBound !== undefined) {
                 if (target instanceof WindowPreview) {
                     if (this._tileTip) {
                         this._tileTip.hide();
                     }
-                    this._tileTip = new St.Widget({
-                        name: 'DragnTileTip',
-                        style_class: 'tile-preview',
-                        x: left,
-                        y: top,
-                        width: right - left,
-                        height: bottom - top,
-                        opacity: 0,
-                    });
 
+                    this._tileTip.set_position(left, top);
+                    this._tileTip.set_size(right - left, bottom - top);
                     Main.uiGroup.add_child(this._tileTip);
                     Main.uiGroup.set_child_above_sibling(this._tileTip, null);
                     // put dnd on top of tileTip
@@ -257,7 +213,7 @@ export default class DragnTileExtension extends Extension {
                         duration: WINDOW_ANIMATION_TIME,
                         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                     });
-                    console.log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
+                    this._log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
 
                     this._tile = this._nextTile;
                     break;
@@ -272,7 +228,7 @@ export default class DragnTileExtension extends Extension {
 
     _getQuadrant(workspace, event) {
         let source = event.source;
-        let ret = {quad: -1, preview: undefined};
+        let ret = {quad: QUAD_NONE, preview: undefined};
         // TODO: maybe peek actors at point?
         for (const window of workspace._windows) {
             if (window instanceof WindowPreview && window !== source) {
@@ -283,20 +239,63 @@ export default class DragnTileExtension extends Extension {
                 let {x: right, y: bottom} = window.apply_transform_to_point(rightbottom);
 
                 if (event.x > left && event.x < (left + right) / 2 && event.y > top && event.y < (top + bottom) / 2) {
-                    ret = {quad: 0, preview: window};
+                    ret = {quad: QUAD_0, preview: window};
                 } else if (event.x > (left + right) / 2 && event.x < right && event.y > top && event.y < (top + bottom) / 2) {
-                    ret = {quad: 1, preview: window};
+                    ret = {quad: QUAD_1, preview: window};
                 } else if (event.x > (left + right) / 2 && event.x < right && event.y > (top + bottom) / 2 && event.y < bottom) {
-                    ret = {quad: 2, preview: window};
+                    ret = {quad: QUAD_2, preview: window};
                 } else if (event.x > left && event.x < (left + right) / 2 && event.y > (top + bottom) / 2 && event.y < bottom) {
-                    ret = {quad: 3, preview: window};
+                    ret = {quad: QUAD_3, preview: window};
                 }
-
-                if (ret.quad != -1) {
+                if (ret.quad !== QUAD_NONE) {
                     break;
                 }
             }
         }
         return ret;
+    }
+
+    _getTileMode(current, last) {
+        let ret = 'none';
+        if (last === QUAD_NONE && current === QUAD_0) {
+            // source left target right
+            ret = 'SLTR';
+        } else if (last === QUAD_NONE && current === QUAD_1) {
+            ret = 'TLSR';
+        } else if (last === QUAD_NONE && current === QUAD_2) {
+            ret = 'TLSR';
+        } else if (last === QUAD_NONE && current === QUAD_3) {
+            ret = 'SLTR';
+        } else if (last === QUAD_0 && current === QUAD_1) {
+            ret = 'TLSR';
+        } else if (last === QUAD_1 && current === QUAD_2) {
+            // target top source bottom
+            ret = 'TTSB';
+        } else if (last === QUAD_2 && current === QUAD_3) {
+            ret = 'SLTR';
+        } else if (last === QUAD_3 && current === QUAD_0) {
+            ret = 'STTB';
+        } else if (last === QUAD_0 && current === QUAD_3) {
+            ret = 'TTSB';
+        } else if (last === QUAD_3 && current === QUAD_2) {
+            ret = 'TLSR';
+        } else if (last === QUAD_2 && current === QUAD_1) {
+            ret = 'STTB';
+        } else if (last === QUAD_1 && current === QUAD_0) {
+            ret = 'SLTR';
+        } else if (last !== current) {
+            // it means from QUAD_XXX to QUAD_NONE
+            ret = 'none';
+        } else {
+            // here we keep _nextTile, because _nextTile may not be applied now
+            ret = this._nextTile;
+        }
+        return ret;
+    }
+
+    _log(...args) {
+        if (this._debug.get_boolean()) {
+            console.log(...args);
+        }
     }
 }
