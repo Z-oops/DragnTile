@@ -16,16 +16,13 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 import Clutter from 'gi://Clutter';
-import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
-import GLib from 'gi://GLib';
 import Graphene from 'gi://Graphene';
 import Mtk from 'gi://Mtk';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
-import * as WM from 'resource:///org/gnome/shell/ui/windowManager.js';
 import {WindowPreview} from 'resource:///org/gnome/shell/ui/windowPreview.js';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';

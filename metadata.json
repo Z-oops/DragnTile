@@ -1,9 +1,11 @@
 {
   "name": "DragnTile",
-  "description": "DragnTile",
+  "description": "Split screen in an easy way.",
   "uuid": "DragnTile@luozengcn.gmail.com",
   "shell-version": [
-    "47"
+    "45","46","47"
   ],
+  "version-name": "25.02.1",
+  "url": "https://github.com/Z-oops/DragnTile",
   "settings-schema": "org.gnome.shell.extensions.DragnTile"
 }
