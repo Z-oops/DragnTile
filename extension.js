@@ -127,6 +127,10 @@ export default class DragnTileExtension extends Extension {
 
     _onDragMotion(event) {
         let source = event.source;
+        if (!(source instanceof WindowPreview)) {
+            return DND.DragMotionResult.CONTINUE;
+        }
+
         // if drag point intersects any WindowPreview
         let {quad: quadrant, preview: windowpreview} = this._getQuadrant(source._workspace, event);
         this._nextTile = this._getTileMode(quadrant, this._quadrant);
@@ -220,7 +224,7 @@ export default class DragnTileExtension extends Extension {
         }
 
         // always listen dragmotion event
-        return DND.DragDropResult.CONTINUE;
+        return DND.DragMotionResult.CONTINUE;
     }
 
     _getQuadrant(workspace, event) {
