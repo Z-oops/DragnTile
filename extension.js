@@ -58,6 +58,7 @@ export default class DragnTileExtension extends Extension {
 
         this._source = null;
         this._target = null;
+        this._restoreList = {};
 
         // Create a new GSettings object
         this._settings = this.getSettings();
@@ -90,28 +91,55 @@ export default class DragnTileExtension extends Extension {
             let workspace = this._target.metaWindow.get_workspace();
             let monitorWorkArea = workspace.get_work_area_for_monitor(monitor);
 
+            let srcMetaWin = this._source.metaWindow;
+            let tgtMetaWin = this._target.metaWindow;
+            let savedSrcRect = srcMetaWin.get_frame_rect();
+            let savedTgtRect = tgtMetaWin.get_frame_rect();
+            if (this._restoreList[srcMetaWin.get_id()] !== undefined) {
+                srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
+                delete this._restoreList[srcMetaWin.get_id()];
+            }
+            if (this._restoreList[tgtMetaWin.get_id()] !== undefined) {
+                tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
+                delete this._restoreList[tgtMetaWin.get_id()];
+            }
+
             this._target._activate();
-            this._target.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-            this._target.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            tgtMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+            tgtMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
 
             this._source._activate();
-            this._source.metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-            this._source.metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            srcMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+            srcMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
+
             if (this._tile === 'SLTR') {
                 // source left target right
-                this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-                this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
             } else if (this._tile === 'TLSR') {
-                this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-                this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
             } else if (this._tile === 'STTB') {
                 // source top target bottom
-                this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
-                this._source.metaWindow.move_resize_frame(false, 0, 0, monitorWorkArea.width, monitorWorkArea.height/2);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
+                srcMetaWin.move_resize_frame(false, 0, 0, monitorWorkArea.width, monitorWorkArea.height/2);
             } else if (this._tile === 'TTSB') {
-                this._target.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2);
-                this._source.metaWindow.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
             }
+
+            setTimeout(() => {
+                this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', () => {
+                    srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
+                    srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
+                    delete this._restoreList[srcMetaWin.get_id()];
+                });
+                this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', () => {
+                    tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
+                    tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
+                    delete this._restoreList[tgtMetaWin.get_id()];
+                });
+            }, 1000);
         }
 
         // clear extension states when drag and drop
@@ -197,6 +225,7 @@ export default class DragnTileExtension extends Extension {
 
                     this._tileTip.set_position(left, top);
                     this._tileTip.set_size(right - left, bottom - top);
+                    // TODO: Here set_child we meets an error message. It seems harmless but fix it later
                     Main.uiGroup.add_child(this._tileTip);
                     Main.uiGroup.set_child_above_sibling(this._tileTip, null);
                     // put dnd on top of tileTip
