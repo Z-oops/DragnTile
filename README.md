@@ -14,9 +14,9 @@ gnome-extensions install DragnTile@luozengcn.gmail.com.zip
 ```
 
 # Planning
-1. Restore window position and size after split quited
-2. Support recording tiling operations and restoring them
-3. Enlarge on focus
+1. Support dragging to change split ratio
+2. Enlarge on focus
+3. Support recording tiling operations and restoring them
 
 # Issue report
 Open extention settings and switch `debug` on. Reproduce the issue and provide log with journalctl.
