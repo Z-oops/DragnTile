@@ -94,7 +94,18 @@ export default class DragnTileExtension extends Extension {
             let srcMetaWin = this._source.metaWindow;
             let tgtMetaWin = this._target.metaWindow;
             let savedSrcRect = srcMetaWin.get_frame_rect();
+            if (srcMetaWin.get_maximized() || this._restoreList[srcMetaWin.get_id()] !== undefined) {
+                // if the window is in maximize or split state before trigger a new split,
+                // to make it simple, we just shrink saved windows size by 0.7
+                savedSrcRect.width = savedSrcRect.width * 0.7;
+                savedSrcRect.height = savedSrcRect.height * 0.7;
+            }
             let savedTgtRect = tgtMetaWin.get_frame_rect();
+            if (tgtMetaWin.get_maximized() || this._restoreList[tgtMetaWin.get_id()] !== undefined) {
+                savedTgtRect.width = savedTgtRect.width * 0.7;
+                savedTgtRect.height = savedTgtRect.height * 0.7;
+            }
+
             if (this._restoreList[srcMetaWin.get_id()] !== undefined) {
                 srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
                 delete this._restoreList[srcMetaWin.get_id()];
