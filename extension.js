@@ -20,6 +20,7 @@ import Meta from 'gi://Meta';
 import St from 'gi://St';
 import Graphene from 'gi://Graphene';
 import Mtk from 'gi://Mtk';
+import GLib from 'gi://GLib';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
@@ -78,6 +79,11 @@ export default class DragnTileExtension extends Extension {
 
         this._tileTip?.destroy();
         this._tileTip = null;
+
+        if (this._timeoutId) {
+            GLib.Source.remove(this._timeoutId);
+            delete this._timeoutId;
+        }
 
         this._source = null;
         this._target = null;
@@ -139,7 +145,12 @@ export default class DragnTileExtension extends Extension {
                 srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
             }
 
-            setTimeout(() => {
+            if (this._timeoutId) {
+                GLib.Source.remove(this._timeoutId);
+                delete this._timeoutId;
+            }
+            // wait for complete of the window animation
+            this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
                 this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', () => {
                     srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
                     srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
@@ -150,7 +161,9 @@ export default class DragnTileExtension extends Extension {
                     tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
                     delete this._restoreList[tgtMetaWin.get_id()];
                 });
-            }, 1000);
+                delete this._timeoutId;
+                return GLib.SOURCE_REMOVE;
+            });
         }
 
         // clear extension states when drag and drop
