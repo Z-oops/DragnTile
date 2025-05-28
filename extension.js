@@ -194,6 +194,7 @@ export default class DragnTileExtension extends Extension {
         } else {
             this._tile = this._nextTile;
             this._tileTip?.hide();
+            return DND.DragMotionResult.CONTINUE;
         }
         this._log('DragnTileExtension.drag', source.get_name(),
             ', point', event.x, event.y, ', quadrant', quadrant,
@@ -206,7 +207,7 @@ export default class DragnTileExtension extends Extension {
             // let drag event pass in a target preview window.
             this._tileTip?.hide();
 
-            let target = event.targetActor;
+            let target = this._target;
             let dstBound = undefined;
             const topleft = new Graphene.Point3D({x: 0, y: 0});
             const rightbottom = new Graphene.Point3D({x: target.get_width(), y: target.get_height()});
