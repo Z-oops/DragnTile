@@ -37,6 +37,7 @@ const QUAD_0 = 0;
 const QUAD_1 = 1;
 const QUAD_2 = 2;
 const QUAD_3 = 3;
+const QUAD_LAST = 4
 const QUAD_NONE = -1;  // a point doesn't intersect with area
 
 export default class DragnTileExtension extends Extension {
@@ -184,9 +185,13 @@ export default class DragnTileExtension extends Extension {
         }
 
         // if drag point intersects any WindowPreview
-        let {quad: quadrant, preview: windowpreview} = this._getQuadrant(source._workspace, event);
-        this._nextTile = this._getTileMode(quadrant, this._quadrant);
-        this._quadrant = quadrant;
+        let {quad: quadrant, preview: windowpreview} = this._getPortion(source._workspace, event);
+        if (quadrant === QUAD_LAST) {
+            this._nextTile = this._tile;
+        } else {
+            this._nextTile = this._getTileMode(quadrant, this._quadrant);
+            this._quadrant = quadrant;
+        }
 
         if (this._nextTile !== 'none') {
             this._source = source;
@@ -281,7 +286,7 @@ export default class DragnTileExtension extends Extension {
         return DND.DragMotionResult.CONTINUE;
     }
 
-    _getQuadrant(workspace, event) {
+    _getPortion(workspace, event) {
         let source = event.source;
         let ret = {quad: QUAD_NONE, preview: undefined};
         // TODO: maybe peek actors at point?
@@ -293,14 +298,35 @@ export default class DragnTileExtension extends Extension {
                 let {x: left, y: top} = window.apply_transform_to_point(topleft);
                 let {x: right, y: bottom} = window.apply_transform_to_point(rightbottom);
 
-                if (event.x > left && event.x < (left + right) / 2 && event.y > top && event.y < (top + bottom) / 2) {
-                    ret = {quad: QUAD_0, preview: window};
-                } else if (event.x > (left + right) / 2 && event.x < right && event.y > top && event.y < (top + bottom) / 2) {
-                    ret = {quad: QUAD_1, preview: window};
-                } else if (event.x > (left + right) / 2 && event.x < right && event.y > (top + bottom) / 2 && event.y < bottom) {
-                    ret = {quad: QUAD_2, preview: window};
-                } else if (event.x > left && event.x < (left + right) / 2 && event.y > (top + bottom) / 2 && event.y < bottom) {
+                // out of preview box
+                if (event.x < left || event.x > right || event.y < top || event.y > bottom) continue;
+
+                let width = right - left;
+                let height = bottom - top;
+                let k1 = height / width;
+
+                let y1 = -1 * k1 * (event.x - left) + height + top;
+                let y2 = k1 * (event.x - left) + top;
+
+                let ratio  = 0.3;
+                let notInterested = {
+                    x1: left + width / 2 - width * ratio / 2,
+                    y1: top + height / 2 - height * ratio / 2,
+                    x2: left + width / 2 + width * ratio / 2,
+                    y2: top + height / 2 + height * ratio / 2
+                };
+
+                if (event.x > notInterested.x1 && event.x < notInterested.x2
+                    && event.y > notInterested.y1 && event.y < notInterested.y2) {
+                    ret = {quad: QUAD_LAST, preview: window};
+                } else if (event.y > y1 && event.y > y2) {
                     ret = {quad: QUAD_3, preview: window};
+                } else if (event.y < y1 && event.y > y2) {
+                    ret = {quad: QUAD_0, preview: window};
+                } else if (event.y < y1 && event.y < y2) {
+                    ret = {quad: QUAD_1, preview: window};
+                } else if (event.y > y1 && event.y < y2) {
+                    ret = {quad: QUAD_2, preview: window};
                 }
                 if (ret.quad !== QUAD_NONE) {
                     break;
@@ -312,38 +338,14 @@ export default class DragnTileExtension extends Extension {
 
     _getTileMode(current, last) {
         let ret = 'none';
-        if (last === QUAD_NONE && current === QUAD_0) {
-            // source left target right
+        if (current === QUAD_0) {
             ret = 'SLTR';
-        } else if (last === QUAD_NONE && current === QUAD_1) {
-            ret = 'TLSR';
-        } else if (last === QUAD_NONE && current === QUAD_2) {
-            ret = 'TLSR';
-        } else if (last === QUAD_NONE && current === QUAD_3) {
-            ret = 'SLTR';
-        } else if (last === QUAD_0 && current === QUAD_1) {
-            ret = 'TLSR';
-        } else if (last === QUAD_1 && current === QUAD_2) {
-            // target top source bottom
-            ret = 'TTSB';
-        } else if (last === QUAD_2 && current === QUAD_3) {
-            ret = 'SLTR';
-        } else if (last === QUAD_3 && current === QUAD_0) {
+        } else if (current === QUAD_1) {
             ret = 'STTB';
-        } else if (last === QUAD_0 && current === QUAD_3) {
-            ret = 'TTSB';
-        } else if (last === QUAD_3 && current === QUAD_2) {
+        } else if (current === QUAD_2) {
             ret = 'TLSR';
-        } else if (last === QUAD_2 && current === QUAD_1) {
-            ret = 'STTB';
-        } else if (last === QUAD_1 && current === QUAD_0) {
-            ret = 'SLTR';
-        } else if (last !== current) {
-            // it means from QUAD_XXX to QUAD_NONE
-            ret = 'none';
-        } else {
-            // here we keep _nextTile, because _nextTile may not be applied now
-            ret = this._nextTile;
+        } else if (current === QUAD_3) {
+            ret = 'TTSB';
         }
         return ret;
     }
