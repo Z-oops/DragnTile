@@ -30,16 +30,6 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
 
-// qudrant_0  | quadrant_1
-//------------------------
-// qudrant_3  | quadrant_2
-const QUAD_0 = 0;
-const QUAD_1 = 1;
-const QUAD_2 = 2;
-const QUAD_3 = 3;
-const QUAD_LAST = 4
-const QUAD_NONE = -1;  // a point doesn't intersect with area
-
 export default class DragnTileExtension extends Extension {
     enable() {
         this._dragMonitor = {
@@ -54,10 +44,7 @@ export default class DragnTileExtension extends Extension {
             opacity: 0,
         });
 
-        this._quadrant = QUAD_NONE;
         this._tile = 'none';
-        this._nextTile = 'none';
-
         this._source = null;
         this._target = null;
         this._restoreList = {};
@@ -169,9 +156,7 @@ export default class DragnTileExtension extends Extension {
 
         // clear extension states when drag and drop
         this._tileTip?.hide();
-        this._nextTile = 'none';
         this._tile = 'none';
-        this._quadrant = QUAD_NONE;
         // release window resource
         this._source = null;
         this._target = null;
@@ -183,31 +168,25 @@ export default class DragnTileExtension extends Extension {
         if (!(source instanceof WindowPreview)) {
             return DND.DragMotionResult.CONTINUE;
         }
+        this._source = source;
 
         // if drag point intersects any WindowPreview
-        let {quad: quadrant, preview: windowpreview} = this._getPortion(source._workspace, event);
-        if (quadrant === QUAD_LAST) {
-            this._nextTile = this._tile;
-        } else {
-            this._nextTile = this._getTileMode(quadrant, this._quadrant);
-            this._quadrant = quadrant;
-        }
-
-        if (this._nextTile !== 'none') {
-            this._source = source;
-            this._target = windowpreview;
-        } else {
-            this._tile = this._nextTile;
+        let {tile: tile, preview: windowpreview} = this._getWindowTile(source._workspace, event);
+        let tileChanged = !(this._tile === tile);
+        this._tile = tile;
+        this._target = windowpreview;
+        if (this._tile === 'none') {
             this._tileTip?.hide();
             return DND.DragMotionResult.CONTINUE;
         }
+
         this._log('DragnTileExtension.drag', source.get_name(),
-            ', point', event.x, event.y, ', quadrant', quadrant,
+            ', point', event.x, event.y,
             ', Preview', windowpreview?.get_name(),
-            ', tilemode', this._nextTile);
+            ', tilemode', this._tile);
 
 
-        if (this._nextTile !== this._tile) {
+        if (tileChanged) {
             // Here tileTip is on top of target preview. Hide it first to
             // let drag event pass in a target preview window.
             this._tileTip?.hide();
@@ -220,25 +199,25 @@ export default class DragnTileExtension extends Extension {
             let {x: left, y: top} = target.apply_transform_to_point(topleft);
             let {x: right, y: bottom} = target.apply_transform_to_point(rightbottom);
 
-            if (this._nextTile === 'SLTR') {
+            if (this._tile === 'SLTR') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top,
                     width: (right - left) / 2,
                     height: (bottom - top)});
-            } else if (this._nextTile === 'TLSR') {
+            } else if (this._tile === 'TLSR') {
                 dstBound = new Mtk.Rectangle({
                     x: left + (right - left) / 2,
                     y: top,
                     width: (right - left) / 2,
                     height: (bottom - top)});
-            } else if (this._nextTile === 'STTB') {
+            } else if (this._tile === 'STTB') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top,
                     width: (right - left),
                     height: (bottom - top) / 2});
-            } else if (this._nextTile === 'TTSB') {
+            } else if (this._tile === 'TTSB') {
                 dstBound = new Mtk.Rectangle({
                     x: left,
                     y: top + (bottom - top) / 2,
@@ -274,8 +253,6 @@ export default class DragnTileExtension extends Extension {
                         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                     });
                     this._log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
-
-                    this._tile = this._nextTile;
                     break;
                 }
                 target = target.get_parent();
@@ -286,9 +263,9 @@ export default class DragnTileExtension extends Extension {
         return DND.DragMotionResult.CONTINUE;
     }
 
-    _getPortion(workspace, event) {
+    _getWindowTile(workspace, event) {
         let source = event.source;
-        let ret = {quad: QUAD_NONE, preview: undefined};
+        let ret = {tile: 'none', preview: undefined};
         // TODO: maybe peek actors at point?
         for (const window of workspace._windows) {
             if (window instanceof WindowPreview && window !== source) {
@@ -309,43 +286,29 @@ export default class DragnTileExtension extends Extension {
                 let y2 = k1 * (event.x - left) + top;
 
                 let ratio  = 0.3;
-                let notInterested = {
+                let keep = {
                     x1: left + width / 2 - width * ratio / 2,
                     y1: top + height / 2 - height * ratio / 2,
                     x2: left + width / 2 + width * ratio / 2,
                     y2: top + height / 2 + height * ratio / 2
                 };
 
-                if (event.x > notInterested.x1 && event.x < notInterested.x2
-                    && event.y > notInterested.y1 && event.y < notInterested.y2) {
-                    ret = {quad: QUAD_LAST, preview: window};
+                if (event.x > keep.x1 && event.x < keep.x2
+                    && event.y > keep.y1 && event.y < keep.y2) {
+                    ret = {tile: this._tile, preview: window};
                 } else if (event.y > y1 && event.y > y2) {
-                    ret = {quad: QUAD_3, preview: window};
+                    ret = {tile: 'TTSB', preview: window};
                 } else if (event.y < y1 && event.y > y2) {
-                    ret = {quad: QUAD_0, preview: window};
+                    ret = {tile: 'SLTR', preview: window};
                 } else if (event.y < y1 && event.y < y2) {
-                    ret = {quad: QUAD_1, preview: window};
+                    ret = {tile: 'STTB', preview: window};
                 } else if (event.y > y1 && event.y < y2) {
-                    ret = {quad: QUAD_2, preview: window};
+                    ret = {tile: 'TLSR', preview: window};
                 }
-                if (ret.quad !== QUAD_NONE) {
+                if (ret.tile !== 'none') {
                     break;
                 }
             }
-        }
-        return ret;
-    }
-
-    _getTileMode(current, last) {
-        let ret = 'none';
-        if (current === QUAD_0) {
-            ret = 'SLTR';
-        } else if (current === QUAD_1) {
-            ret = 'STTB';
-        } else if (current === QUAD_2) {
-            ret = 'TLSR';
-        } else if (current === QUAD_3) {
-            ret = 'TTSB';
         }
         return ret;
     }
