@@ -49,6 +49,9 @@ export default class DragnTileExtension extends Extension {
         this._target = null;
         this._restoreList = {};
 
+        this._shellwm =  global.window_manager;
+        this._shellwm.connect('size-changed', this._sizeChangedWindow.bind(this));
+
         // Create a new GSettings object
         this._settings = this.getSettings();
         this._debug = this._settings.get_value('debug');
@@ -75,6 +78,12 @@ export default class DragnTileExtension extends Extension {
 
         this._source = null;
         this._target = null;
+    }
+
+    _log(...args) {
+        if (this._debug.get_boolean()) {
+            console.log(...args);
+        }
     }
 
     _onDragDrop(event) {
@@ -171,7 +180,7 @@ export default class DragnTileExtension extends Extension {
         this._source = source;
 
         // if drag point intersects any WindowPreview
-        let {tile: tile, preview: windowpreview} = this._getWindowTile(source._workspace, event);
+        let { tile: tile, preview: windowpreview } = this._getWindowTile(source._workspace, event);
         let tileChanged = !(this._tile === tile);
         this._tile = tile;
         this._target = windowpreview;
@@ -313,9 +322,9 @@ export default class DragnTileExtension extends Extension {
         return ret;
     }
 
-    _log(...args) {
-        if (this._debug.get_boolean()) {
-            console.log(...args);
-        }
+    _sizeChangedWindow(shellwm, actor) {
+        if (!(actor instanceof Meta.WindowActor)) return;
+
+        console.log('_sizeChangeWindow', actor.get_meta_window().get_title());
     }
 }
