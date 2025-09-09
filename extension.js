@@ -30,6 +30,49 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
 
+class TileLayout {
+    constructor() {
+        this._windows = [];
+    }
+
+    update(metaWindow, r, c) {
+        this._windows = this._windows.filter(item=>item.window!==metaWindow);
+        this._windows.push({
+            window: metaWindow,
+            row: r, // not used currently
+            col: c  // not used currently
+        });
+
+        relayout();
+    }
+
+    relayout() {
+        // it only supports two windows now
+        if (this._windows.length !== 2) return;
+
+        focus = this._windows.find(item=>item.window.has_focus());
+        if (focus === undefined) return;
+
+        other = this._windows.find(item=>item.window !== focus);
+
+        let monitor = focus.get_monitor();
+        let workspace = focus.get_workspace();
+        let workarea = workspace.get_work_area_for_monitor(monitor);
+
+        focusRect = focus.get_frame_rect();
+        otherRect = other.get_frame_rect();
+        if (focusRect.x < otherRect.x) {
+            other.move_resize_frame(true, focusRect.x + focusRect.width, otherRect.y, workarea.width - focusRect.x - focusRect.width, otherRect.height);
+        } else if (focusRect.x > otherRect.x) {
+            other.move_resize_frame(true, otherRect.x, otherRect.y, workarea.width - focusRect.x - otherRect.x, otherRect.height);
+        } else if (focusRect.y < otherRect.y) {
+            other.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height, otherRect.width, workarea.height - focusRect.y - focusRect.height);
+        } else if (focusRect.y > otherRect.y) {
+            other.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, workarea.height - focusRect.y - otherRect.y);
+        }
+    }
+}
+
 export default class DragnTileExtension extends Extension {
     enable() {
         this._dragMonitor = {
