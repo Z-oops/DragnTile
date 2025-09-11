@@ -36,39 +36,40 @@ class TileLayout {
     }
 
     update(metaWindow, r, c) {
-        this._windows = this._windows.filter(item=>item.window!==metaWindow);
+        this._windows = this._windows.filter(item => item.window !== metaWindow);
         this._windows.push({
             window: metaWindow,
             row: r, // not used currently
             col: c  // not used currently
         });
 
-        relayout();
+        this.relayout();
     }
 
     relayout() {
         // it only supports two windows now
         if (this._windows.length !== 2) return;
 
-        focus = this._windows.find(item=>item.window.has_focus());
+        let focus = this._windows.find(item => item.window.has_focus());
         if (focus === undefined) return;
 
-        other = this._windows.find(item=>item.window !== focus);
+        let other = this._windows.find(item => item.window !== focus.window);
 
-        let monitor = focus.get_monitor();
-        let workspace = focus.get_workspace();
+        let monitor = focus.window.get_monitor();
+        let workspace = focus.window.get_workspace();
         let workarea = workspace.get_work_area_for_monitor(monitor);
 
-        focusRect = focus.get_frame_rect();
-        otherRect = other.get_frame_rect();
+        let focusRect = focus.window.get_frame_rect();
+        let otherRect = other.window.get_frame_rect();
+        console.log('focus:', focus.window.get_title(), focus.window.get_id(), 'other:', other.window.get_title(), other.window.get_id());
         if (focusRect.x < otherRect.x) {
-            other.move_resize_frame(true, focusRect.x + focusRect.width, otherRect.y, workarea.width - focusRect.x - focusRect.width, otherRect.height);
+            other.window.move_resize_frame(true, focusRect.x + focusRect.width, otherRect.y, workarea.x + workarea.width - focusRect.x - focusRect.width, otherRect.height);
         } else if (focusRect.x > otherRect.x) {
-            other.move_resize_frame(true, otherRect.x, otherRect.y, workarea.width - focusRect.x - otherRect.x, otherRect.height);
+            other.window.move_resize_frame(true, otherRect.x, otherRect.y, focusRect.x - otherRect.x, otherRect.height);
         } else if (focusRect.y < otherRect.y) {
-            other.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height, otherRect.width, workarea.height - focusRect.y - focusRect.height);
+            other.window.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height, otherRect.width, workarea.y + workarea.height - focusRect.y - focusRect.height);
         } else if (focusRect.y > otherRect.y) {
-            other.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, workarea.height - focusRect.y - otherRect.y);
+            other.window.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, focusRect.y - otherRect.y);
         }
     }
 }
@@ -94,6 +95,7 @@ export default class DragnTileExtension extends Extension {
 
         this._shellwm =  global.window_manager;
         this._shellwm.connect('size-changed', this._sizeChangedWindow.bind(this));
+        this._layoutManager = new TileLayout;
 
         // Create a new GSettings object
         this._settings = this.getSettings();
@@ -110,6 +112,8 @@ export default class DragnTileExtension extends Extension {
         DND.removeDragMonitor(this._dragMonitor);
         this._dragMonitor = undefined;
         this._settings = null;
+        this._shellwm =  null;
+        this._layoutManager = null;
 
         this._tileTip?.destroy();
         this._tileTip = null;
@@ -189,26 +193,29 @@ export default class DragnTileExtension extends Extension {
                 GLib.Source.remove(this._timeoutId);
                 delete this._timeoutId;
             }
-            // wait for complete of the window animation
-            this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', () => {
-                    srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
-                    srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
-                    delete this._restoreList[srcMetaWin.get_id()];
-                });
-                this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', () => {
-                    tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
-                    tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
-                    delete this._restoreList[tgtMetaWin.get_id()];
-                });
-                delete this._timeoutId;
-                return GLib.SOURCE_REMOVE;
-            });
+            // // wait for complete of the window animation
+            // this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            //     // quit splt state when window position changes
+            //     this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', () => {
+            //         srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
+            //         srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
+            //         delete this._restoreList[srcMetaWin.get_id()];
+            //         this._tile = 'none';
+            //     });
+            //     this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', () => {
+            //         tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
+            //         tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
+            //         delete this._restoreList[tgtMetaWin.get_id()];
+            //         this._tile = 'none';
+            //     });
+            //     delete this._timeoutId;
+            //     return GLib.SOURCE_REMOVE;
+            // });
         }
 
         // clear extension states when drag and drop
         this._tileTip?.hide();
-        this._tile = 'none';
+        //this._tile = 'none';
         // release window resource
         this._source = null;
         this._target = null;
@@ -366,7 +373,9 @@ export default class DragnTileExtension extends Extension {
     }
 
     _sizeChangedWindow(shellwm, actor) {
-        if (!(actor instanceof Meta.WindowActor)) return;
+        if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
+
+        this._layoutManager.update(actor.get_meta_window(), 1, 1);
 
         console.log('_sizeChangeWindow', actor.get_meta_window().get_title());
     }
