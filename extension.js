@@ -42,7 +42,6 @@ class TileLayout {
             row: r, // not used currently
             col: c  // not used currently
         });
-
         this.relayout();
     }
 
@@ -61,14 +60,19 @@ class TileLayout {
 
         let focusRect = focus.window.get_frame_rect();
         let otherRect = other.window.get_frame_rect();
-        console.log('focus:', focus.window.get_title(), focus.window.get_id(), 'other:', other.window.get_title(), other.window.get_id());
+        this._log('focus:', focus.window.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
+            'other:', other.window.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
         if (focusRect.x < otherRect.x) {
+            other.window.move_frame(true, focusRect.x + focusRect.width, otherRect.y);
             other.window.move_resize_frame(true, focusRect.x + focusRect.width, otherRect.y, workarea.x + workarea.width - focusRect.x - focusRect.width, otherRect.height);
         } else if (focusRect.x > otherRect.x) {
+            other.window.move_frame(true, otherRect.x, otherRect.y);
             other.window.move_resize_frame(true, otherRect.x, otherRect.y, focusRect.x - otherRect.x, otherRect.height);
         } else if (focusRect.y < otherRect.y) {
+            other.window.move_frame(true, otherRect.x, focusRect.y + focusRect.height);
             other.window.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height, otherRect.width, workarea.y + workarea.height - focusRect.y - focusRect.height);
         } else if (focusRect.y > otherRect.y) {
+            other.window.move_frame(true, otherRect.x, otherRect.y);
             other.window.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, focusRect.y - otherRect.y);
         }
     }
@@ -94,7 +98,7 @@ export default class DragnTileExtension extends Extension {
         this._restoreList = {};
 
         this._shellwm =  global.window_manager;
-        this._shellwm.connect('size-changed', this._sizeChangedWindow.bind(this));
+        this._sizechangeId = null;
         this._layoutManager = new TileLayout;
 
         // Create a new GSettings object
@@ -136,6 +140,9 @@ export default class DragnTileExtension extends Extension {
     _onDragDrop(event) {
         if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
             this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
+
+            this._shellwm.disconnect(this._sizechangeId);
+            this._sizechangeId = null;
 
             let monitor = this._target.metaWindow.get_monitor();
             let workspace = this._target.metaWindow.get_workspace();
@@ -193,24 +200,42 @@ export default class DragnTileExtension extends Extension {
                 GLib.Source.remove(this._timeoutId);
                 delete this._timeoutId;
             }
-            // // wait for complete of the window animation
-            // this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-            //     // quit splt state when window position changes
-            //     this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', () => {
-            //         srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
-            //         srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
-            //         delete this._restoreList[srcMetaWin.get_id()];
-            //         this._tile = 'none';
-            //     });
-            //     this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', () => {
-            //         tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
-            //         tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
-            //         delete this._restoreList[tgtMetaWin.get_id()];
-            //         this._tile = 'none';
-            //     });
-            //     delete this._timeoutId;
-            //     return GLib.SOURCE_REMOVE;
-            // });
+
+            let restoreWindow = (metaWin) => {
+                let monitor = metaWin.get_monitor();
+                let workspace = metaWin.get_workspace();
+                let workarea = workspace.get_work_area_for_monitor(monitor);
+                const wf = metaWin.get_frame_rect();
+
+                if (wf.x === workarea.x || wf.y === workarea.y) return;
+
+                srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
+                srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
+                delete this._restoreList[srcMetaWin.get_id()];
+
+                tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
+                tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
+                delete this._restoreList[tgtMetaWin.get_id()];
+
+                this._shellwm.disconnect(this._sizechangeId);
+                this._sizechangeId = null;
+
+                this._tile = 'none';
+            }
+
+            // wait for complete of the window animation
+            this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                // quit splt state when window position changes
+                this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', restoreWindow.bind(this));
+                this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', restoreWindow.bind(this));
+                this._sizechangeId = this._shellwm.connect('size-changed', this._sizeChangedWindow.bind(this));
+
+                this._layoutManager.update(tgtMetaWin, 1, 1);
+                this._layoutManager.update(srcMetaWin, 1, 1);
+
+                delete this._timeoutId;
+                return GLib.SOURCE_REMOVE;
+            });
         }
 
         // clear extension states when drag and drop
@@ -374,9 +399,6 @@ export default class DragnTileExtension extends Extension {
 
     _sizeChangedWindow(shellwm, actor) {
         if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
-
         this._layoutManager.update(actor.get_meta_window(), 1, 1);
-
-        console.log('_sizeChangeWindow', actor.get_meta_window().get_title());
     }
 }
