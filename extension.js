@@ -60,7 +60,7 @@ class TileLayout {
 
         let focusRect = focus.window.get_frame_rect();
         let otherRect = other.window.get_frame_rect();
-        this._log('focus:', focus.window.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
+        console.info('focus:', focus.window.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
             'other:', other.window.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
         if (focusRect.x < otherRect.x) {
             other.window.move_frame(true, focusRect.x + focusRect.width, otherRect.y);
@@ -201,21 +201,30 @@ export default class DragnTileExtension extends Extension {
                 delete this._timeoutId;
             }
 
+            let tgtId = tgtMetaWin.get_id();
+            let srcId = srcMetaWin.get_id();
             let restoreWindow = (metaWin) => {
                 let monitor = metaWin.get_monitor();
                 let workspace = metaWin.get_workspace();
                 let workarea = workspace.get_work_area_for_monitor(monitor);
                 const wf = metaWin.get_frame_rect();
 
+                // it doesn't quit tiling
                 if (wf.x === workarea.x || wf.y === workarea.y) return;
 
-                srcMetaWin.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
-                srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
-                delete this._restoreList[srcMetaWin.get_id()];
+                let metaWinSrc = global.get_window_actors().find(actor => srcId === actor.get_meta_window().get_id())?.get_meta_window();
+                if (metaWinSrc !== undefined) {
+                    metaWinSrc.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
+                    metaWinSrc.disconnect(this._restoreList[srcMetaWin.get_id()]);
+                    delete this._restoreList[srcId];
+                }
 
-                tgtMetaWin.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
-                tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
-                delete this._restoreList[tgtMetaWin.get_id()];
+                let metaWinTgt = global.get_window_actors().find(actor => tgtId === actor.get_meta_window().get_id())?.get_meta_window();
+                if (metaWinTgt !== undefined) {
+                    metaWinTgt.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
+                    metaWinTgt.disconnect(this._restoreList[tgtMetaWin.get_id()]);
+                    delete this._restoreList[tgtMetaWin.get_id()];
+                }
 
                 this._shellwm.disconnect(this._sizechangeId);
                 this._sizechangeId = null;
