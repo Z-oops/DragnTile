@@ -35,6 +35,10 @@ class TileLayout {
         this._windows = [];
     }
 
+    clear() {
+        this._windows = [];
+    }
+
     update(metaWindow, r, c) {
         this._windows = this._windows.filter(item => item.window !== metaWindow);
         this._windows.push({
@@ -140,7 +144,7 @@ export default class DragnTileExtension extends Extension {
     _onDragDrop(event) {
         if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
             this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
-
+            this._layoutManager.clear();
             this._shellwm.disconnect(this._sizechangeId);
             this._sizechangeId = null;
 
