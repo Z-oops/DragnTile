@@ -12,11 +12,14 @@ cd DragnTile
 zip DragnTile@luozengcn.gmail.com.zip -r * -x assets
 gnome-extensions install DragnTile@luozengcn.gmail.com.zip
 ```
+# History
+20250917: Support drag to change tiling ratio.
+20250213: Support split screen vertically.
+20250225: available on https://extensions.gnome.org/extension/7863/dragntile/ 
 
 # Planning
-1. Support dragging to change split ratio
-2. Enlarge on focus
-3. Support recording tiling operations and restoring them
+1. Enlarge on focus
+2. Support recording tiling operations and restoring them
 
 # Issue report
 Open extention settings and switch `debug` on. Reproduce the issue and provide log with journalctl.
