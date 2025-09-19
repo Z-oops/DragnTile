@@ -33,6 +33,7 @@ const WINDOW_ANIMATION_TIME = 250;
 class TileLayout {
     constructor() {
         this._windows = [];
+        this._gap = 2;
     }
 
     clear() {
@@ -66,19 +67,24 @@ class TileLayout {
         let otherRect = other.window.get_frame_rect();
         console.info('focus:', focus.window.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
             'other:', other.window.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
+        const gap = this._gap;
         if (focusRect.x < otherRect.x) {
-            other.window.move_frame(true, focusRect.x + focusRect.width, otherRect.y);
-            other.window.move_resize_frame(true, focusRect.x + focusRect.width, otherRect.y, workarea.x + workarea.width - focusRect.x - focusRect.width, otherRect.height);
+            other.window.move_frame(true, focusRect.x + focusRect.width + gap, otherRect.y);
+            other.window.move_resize_frame(true, focusRect.x + focusRect.width + gap, otherRect.y, workarea.x + workarea.width - focusRect.x - focusRect.width - gap, otherRect.height);
         } else if (focusRect.x > otherRect.x) {
             other.window.move_frame(true, otherRect.x, otherRect.y);
-            other.window.move_resize_frame(true, otherRect.x, otherRect.y, focusRect.x - otherRect.x, otherRect.height);
+            other.window.move_resize_frame(true, otherRect.x, otherRect.y, focusRect.x - otherRect.x - gap, otherRect.height);
         } else if (focusRect.y < otherRect.y) {
-            other.window.move_frame(true, otherRect.x, focusRect.y + focusRect.height);
-            other.window.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height, otherRect.width, workarea.y + workarea.height - focusRect.y - focusRect.height);
+            other.window.move_frame(true, otherRect.x, focusRect.y + focusRect.height + gap);
+            other.window.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height + gap, otherRect.width, workarea.y + workarea.height - focusRect.y - focusRect.height - gap);
         } else if (focusRect.y > otherRect.y) {
             other.window.move_frame(true, otherRect.x, otherRect.y);
-            other.window.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, focusRect.y - otherRect.y);
+            other.window.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, focusRect.y - otherRect.y - gap);
         }
+    }
+
+    setGap(gap) {
+        this._gap = gap;
     }
 }
 
@@ -184,20 +190,22 @@ export default class DragnTileExtension extends Extension {
             srcMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
             srcMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
 
+            const gap = this._settings.get_value('window-gap').get_int32();
+            console.log('luozeng window gap', gap);
             if (this._tile === 'SLTR') {
                 // source left target right
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
             } else if (this._tile === 'TLSR') {
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2, monitorWorkArea.y, monitorWorkArea.width/2, monitorWorkArea.height);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
             } else if (this._tile === 'STTB') {
                 // source top target bottom
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
-                srcMetaWin.move_resize_frame(false, 0, 0, monitorWorkArea.width, monitorWorkArea.height/2);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
             } else if (this._tile === 'TTSB') {
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2, monitorWorkArea.width, monitorWorkArea.height/2);
+                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
             }
 
             if (this._timeoutId) {
@@ -412,6 +420,7 @@ export default class DragnTileExtension extends Extension {
 
     _sizeChangedWindow(shellwm, actor) {
         if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
+        this._layoutManager.setGap(this._settings.get_value('window-gap').get_int32());
         this._layoutManager.update(actor.get_meta_window(), 1, 1);
     }
 }
