@@ -1,8 +1,8 @@
 import Gio from 'gi://Gio';
 import Adw from 'gi://Adw';
+import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
-
 
 export default class DragnTilePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -19,7 +19,18 @@ export default class DragnTilePreferences extends ExtensionPreferences {
         });
         page.add(group);
 
-        // Create a new preferences row
+        const spin = new Adw.SpinRow({
+            title: _('Gap'),
+            subtitle: _('Tiling window gaps in pixel (0~40)'),
+        });
+        spin.set_adjustment(new Gtk.Adjustment({
+            lower: 0,
+            upper: 40,
+            step_increment: 1,
+            value: 2,
+        }));
+        group.add(spin);
+
         const row = new Adw.SwitchRow({
             title: _('debug'),
             subtitle: _('Enable debug log'),
@@ -29,6 +40,8 @@ export default class DragnTilePreferences extends ExtensionPreferences {
         // Create a settings object and bind the row to the `show-indicator` key
         window._settings = this.getSettings();
         window._settings.bind('debug', row, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        window._settings.bind('window-gap', spin, 'value',
             Gio.SettingsBindFlags.DEFAULT);
     }
 }

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.DragnTile" path="/org/gnome/shell/extensions/DragnTile/">
+    <key name="window-gap" type="i">
+      <default>2</default>
+    </key>
     <key name="debug" type="b">
       <default>false</default>
     </key>
