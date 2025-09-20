@@ -53,6 +53,8 @@ class TileLayout {
     relayout() {
         // it only supports two windows now
         if (this._windows.length !== 2) return;
+        if (global.get_window_actors().find(actor => this._windows[0].window === actor.get_meta_window()) === undefined) return;
+        if (global.get_window_actors().find(actor => this._windows[1].window === actor.get_meta_window()) === undefined) return;
 
         let focus = this._windows.find(item => item.window.has_focus());
         if (focus === undefined) return;
@@ -191,7 +193,6 @@ export default class DragnTileExtension extends Extension {
             srcMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
 
             const gap = this._settings.get_value('window-gap').get_int32();
-            console.log('luozeng window gap', gap);
             if (this._tile === 'SLTR') {
                 // source left target right
                 tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
