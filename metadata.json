@@ -5,7 +5,7 @@
   "shell-version": [
     "45","46","47","48"
   ],
-  "version-name": "25.09.3",
+  "version-name": "25.09.4",
   "url": "https://github.com/Z-oops/DragnTile",
   "settings-schema": "org.gnome.shell.extensions.DragnTile"
 }
