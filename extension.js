@@ -115,11 +115,19 @@ export default class DragnTileExtension extends Extension {
 
         // Create a new GSettings object
         this._settings = this.getSettings();
-        this._debug = this._settings.get_value('debug');
 
+        this._debug = this._settings.get_value('debug');
         // Watch for changes to a specific setting
         this._settings.connect('changed::debug', (settings, key) => {
             this._debug = settings.get_value(key);
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
+        this._gap = this._settings.get_value('window-gap').get_int32();
+        this._settings.connect('changed::window-gap', (settings, key) => {
+            this._gap = settings.get_value(key).get_int32();
+            this._layoutManager.setGap(this._gap);
+            this._layoutManager.relayout();
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
     }
@@ -192,7 +200,7 @@ export default class DragnTileExtension extends Extension {
             srcMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
             srcMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
 
-            const gap = this._settings.get_value('window-gap').get_int32();
+            const gap = this._gap;
             if (this._tile === 'SLTR') {
                 // source left target right
                 tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
@@ -421,7 +429,6 @@ export default class DragnTileExtension extends Extension {
 
     _sizeChangedWindow(shellwm, actor) {
         if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
-        this._layoutManager.setGap(this._settings.get_value('window-gap').get_int32());
         this._layoutManager.update(actor.get_meta_window(), 1, 1);
     }
 }
