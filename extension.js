@@ -40,6 +40,10 @@ class TileLayout {
         this._windows = [];
     }
 
+    isManaged(window) {
+        return this._windows.filter(item => item.window === window).length !== 0;
+    }
+
     update(metaWindow, r, c) {
         this._windows = this._windows.filter(item => item.window !== metaWindow);
         this._windows.push({
@@ -111,7 +115,7 @@ export default class DragnTileExtension extends Extension {
 
         this._shellwm =  global.window_manager;
         this._sizechangeId = null;
-        this._layoutManager = new TileLayout;
+        this._layoutManager = new TileLayout();
 
         // Create a new GSettings object
         this._settings = this.getSettings();
@@ -130,6 +134,8 @@ export default class DragnTileExtension extends Extension {
             this._layoutManager.relayout();
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
+
+        this._layoutManager.setGap(this._gap);
     }
 
     disable() {
@@ -429,6 +435,8 @@ export default class DragnTileExtension extends Extension {
 
     _sizeChangedWindow(shellwm, actor) {
         if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
-        this._layoutManager.update(actor.get_meta_window(), 1, 1);
+        if (!this._layoutManager.isManaged(actor.get_meta_window())) return;
+
+        this._layoutManager.relayout();
     }
 }
