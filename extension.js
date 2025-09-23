@@ -90,6 +90,30 @@ class TileLayout {
     }
 }
 
+class Utils {
+    static isMaximized(metaWindow) {
+        if (metaWindow.get_maximized !== undefined) {
+            // <= gnome48
+            return metaWindow.get_maximized();
+        } else {
+            return metaWindow.get_maximize_flags() === Meta.MaximizeFlags.HORIZONTAL
+                || metaWindow.get_maximize_flags() === Meta.MaximizeFlags.VERTICAL
+                || metaWindow.get_maximize_flags() === Meta.MaximizeFlags.BOTH;
+        }
+    }
+
+    static unmaximize(metaWindow) {
+        if (metaWindow.set_unmaximize_flags === undefined) {
+            // <= gnome48
+            metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+            metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
+        } else {
+            metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
+            metaWindow.unmaximize();
+        }
+    }
+}
+
 export default class DragnTileExtension extends Extension {
     enable() {
         this._dragMonitor = {
@@ -153,8 +177,10 @@ export default class DragnTileExtension extends Extension {
         if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
             this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
             this._layoutManager.clear();
-            this._shellwm.disconnect(this._sizechangeId);
-            this._sizechangeId = null;
+            if (this._sizechangeId != null) {
+                this._shellwm.disconnect(this._sizechangeId);
+                this._sizechangeId = null;
+            }
 
             let monitor = this._target.metaWindow.get_monitor();
             let workspace = this._target.metaWindow.get_workspace();
@@ -163,14 +189,14 @@ export default class DragnTileExtension extends Extension {
             let srcMetaWin = this._source.metaWindow;
             let tgtMetaWin = this._target.metaWindow;
             let savedSrcRect = srcMetaWin.get_frame_rect();
-            if (srcMetaWin.get_maximized() || this._restoreList[srcMetaWin.get_id()] !== undefined) {
+            if (Utils.isMaximized(srcMetaWin) || this._restoreList[srcMetaWin.get_id()] !== undefined) {
                 // if the window is in maximize or split state before trigger a new split,
                 // to make it simple, we just shrink saved windows size by 0.7
                 savedSrcRect.width = savedSrcRect.width * 0.7;
                 savedSrcRect.height = savedSrcRect.height * 0.7;
             }
             let savedTgtRect = tgtMetaWin.get_frame_rect();
-            if (tgtMetaWin.get_maximized() || this._restoreList[tgtMetaWin.get_id()] !== undefined) {
+            if (Utils.isMaximized(tgtMetaWin) || this._restoreList[tgtMetaWin.get_id()] !== undefined) {
                 savedTgtRect.width = savedTgtRect.width * 0.7;
                 savedTgtRect.height = savedTgtRect.height * 0.7;
             }
@@ -185,12 +211,10 @@ export default class DragnTileExtension extends Extension {
             }
 
             this._target._activate();
-            tgtMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-            tgtMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            Utils.unmaximize(tgtMetaWin);
 
             this._source._activate();
-            srcMetaWin.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-            srcMetaWin.unmaximize(Meta.MaximizeFlags.VERTICAL);
+            Utils.unmaximize(srcMetaWin);
 
             const gap = this._settings.get_value('window-gap').get_int32();
             if (this._tile === 'SLTR') {
