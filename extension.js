@@ -174,6 +174,8 @@ export default class DragnTileExtension extends Extension {
     }
 
     _onDragDrop(event) {
+        if (Main.overview._shownState !== 'SHOWN') return DND.DragDropResult.CONTINUE;
+
         if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
             this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
             this._layoutManager.clear();
@@ -297,6 +299,8 @@ export default class DragnTileExtension extends Extension {
     }
 
     _onDragMotion(event) {
+        if (Main.overview._shownState !== 'SHOWN') return DND.DragMotionResult.CONTINUE;
+
         let source = event.source;
         if (!(source instanceof WindowPreview)) {
             return DND.DragMotionResult.CONTINUE;

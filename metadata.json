@@ -3,9 +3,9 @@
   "description": "Tiling windows from the gnome overview.",
   "uuid": "DragnTile@luozengcn.gmail.com",
   "shell-version": [
-    "45","46","47","48"
+    "45","46","47","48","49"
   ],
-  "version-name": "25.09.4",
+  "version-name": "25.09.5",
   "url": "https://github.com/Z-oops/DragnTile",
   "settings-schema": "org.gnome.shell.extensions.DragnTile"
 }

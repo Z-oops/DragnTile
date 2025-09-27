@@ -22,6 +22,7 @@ gnome-extensions install DragnTile@luozengcn.gmail.com.zip
 # Planning
 1. Enlarge on focus
 2. Support recording tiling operations and restoring them
+3. Support up to 4 windows 
 
 # Issue report
 Open extention settings and switch `debug` on. Reproduce the issue and provide log with journalctl.
