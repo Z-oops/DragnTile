@@ -210,28 +210,31 @@ export default class DragnTileExtension extends Extension {
                 delete this._restoreList[tgtMetaWin.get_id()];
             }
 
+            // active a window to quit overview
             this._target._activate();
+            // make windows moveable and resizeable
             Utils.unmaximize(tgtMetaWin);
-
-            this._source._activate();
             Utils.unmaximize(srcMetaWin);
 
-            const gap = this._settings.get_value('window-gap').get_int32();
-            if (this._tile === 'SLTR') {
-                // source left target right
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-            } else if (this._tile === 'TLSR') {
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-            } else if (this._tile === 'STTB') {
-                // source top target bottom
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-            } else if (this._tile === 'TTSB') {
-                tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-            }
+            this._overviewHiddenId = Main.overview.connect('hidden', () => {
+                const gap = this._settings.get_value('window-gap').get_int32();
+                if (this._tile === 'SLTR') {
+                    // source left target right
+                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                } else if (this._tile === 'TLSR') {
+                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
+                } else if (this._tile === 'STTB') {
+                    // source top target bottom
+                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                } else if (this._tile === 'TTSB') {
+                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
+                }
+                Main.overview.disconnect(this._overviewHiddenId);
+            });
 
             if (this._timeoutId) {
                 GLib.Source.remove(this._timeoutId);
