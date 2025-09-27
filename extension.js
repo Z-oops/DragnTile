@@ -40,6 +40,10 @@ class TileLayout {
         this._windows = [];
     }
 
+    isManaged(window) {
+        return this._windows.filter(item => item.window === window).length !== 0;
+    }
+
     update(metaWindow, r, c) {
         this._windows = this._windows.filter(item => item.window !== metaWindow);
         this._windows.push({
@@ -135,17 +139,27 @@ export default class DragnTileExtension extends Extension {
 
         this._shellwm =  global.window_manager;
         this._sizechangeId = null;
-        this._layoutManager = new TileLayout;
+        this._layoutManager = new TileLayout();
 
         // Create a new GSettings object
         this._settings = this.getSettings();
-        this._debug = this._settings.get_value('debug');
 
+        this._debug = this._settings.get_value('debug');
         // Watch for changes to a specific setting
         this._settings.connect('changed::debug', (settings, key) => {
             this._debug = settings.get_value(key);
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
+
+        this._gap = this._settings.get_value('window-gap').get_int32();
+        this._settings.connect('changed::window-gap', (settings, key) => {
+            this._gap = settings.get_value(key).get_int32();
+            this._layoutManager.setGap(this._gap);
+            this._layoutManager.relayout();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
+        this._layoutManager.setGap(this._gap);
     }
 
     disable() {
@@ -219,7 +233,7 @@ export default class DragnTileExtension extends Extension {
             Utils.unmaximize(srcMetaWin);
 
             this._overviewHiddenId = Main.overview.connect('hidden', () => {
-                const gap = this._settings.get_value('window-gap').get_int32();
+                const gap = this._gap;
                 tgtMetaWin.raise();
                 srcMetaWin.raise();
                 if (this._tile === 'SLTR') {
@@ -455,7 +469,8 @@ export default class DragnTileExtension extends Extension {
 
     _sizeChangedWindow(shellwm, actor) {
         if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
-        this._layoutManager.setGap(this._settings.get_value('window-gap').get_int32());
-        this._layoutManager.update(actor.get_meta_window(), 1, 1);
+        if (!this._layoutManager.isManaged(actor.get_meta_window())) return;
+
+        this._layoutManager.relayout();
     }
 }
