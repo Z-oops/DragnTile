@@ -220,6 +220,8 @@ export default class DragnTileExtension extends Extension {
 
             this._overviewHiddenId = Main.overview.connect('hidden', () => {
                 const gap = this._settings.get_value('window-gap').get_int32();
+                tgtMetaWin.raise();
+                srcMetaWin.raise();
                 if (this._tile === 'SLTR') {
                     // source left target right
                     tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
@@ -235,6 +237,7 @@ export default class DragnTileExtension extends Extension {
                     tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
                     srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
                 }
+
                 Main.overview.disconnect(this._overviewHiddenId);
             });
 
