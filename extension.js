@@ -41,29 +41,25 @@ class TileLayout {
     }
 
     isManaged(window) {
-        return this._windows.filter(item => item.window === window).length !== 0;
+        return this._windows.filter(win => win === window).length !== 0;
     }
 
     update(metaWindow, r, c) {
-        this._windows = this._windows.filter(item => item.window !== metaWindow);
-        this._windows.push({
-            window: metaWindow,
-            row: r, // not used currently
-            col: c  // not used currently
-        });
+        this._windows = this._windows.filter(win => win !== metaWindow);
+        this._windows.push(metaWindow);
         this.relayout();
     }
 
     relayout() {
         // it only supports two windows now
         if (this._windows.length !== 2) return;
-        if (global.get_window_actors().find(actor => this._windows[0].window === actor.get_meta_window()) === undefined) return;
-        if (global.get_window_actors().find(actor => this._windows[1].window === actor.get_meta_window()) === undefined) return;
+        if (global.get_window_actors().find(actor => this._windows[0] === actor.get_meta_window()) === undefined) return;
+        if (global.get_window_actors().find(actor => this._windows[1] === actor.get_meta_window()) === undefined) return;
 
-        let focus = this._windows.find(item => item.window.has_focus());
+        let focus = this._windows.find(win => win.has_focus());
         if (focus === undefined) return;
 
-        let other = this._windows.find(item => item.window !== focus.window);
+        let other = this._windows.find(win => win !== focus.window);
 
         let monitor = focus.window.get_monitor();
         let workspace = focus.window.get_workspace();
