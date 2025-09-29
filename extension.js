@@ -34,71 +34,113 @@ class TileLayout {
     constructor() {
         this._windows = [];
         this._gap = 2;
-    }
-
-    clear() {
-        this._windows = [];
+        this._tile = "none";
+        this._nextTile = "none"
+        this._savedWindowRects = new Map();
     }
 
     isManaged(window) {
         return this._windows.filter(win => win === window).length !== 0;
     }
 
-    update(metaWindow, r, c) {
+    add(metaWindow) {
         this._windows = this._windows.filter(win => win !== metaWindow);
         this._windows.push(metaWindow);
-        this.relayout();
     }
 
     relayout() {
+        //console.log(new Error().stack);
+        if (this._nextTile === "none") return;
+
         // it only supports two windows now
         if (this._windows.length !== 2) return;
         if (global.get_window_actors().find(actor => this._windows[0] === actor.get_meta_window()) === undefined) return;
         if (global.get_window_actors().find(actor => this._windows[1] === actor.get_meta_window()) === undefined) return;
 
         let focus = this._windows.find(win => win.has_focus());
-        if (focus === undefined) return;
+        let other = this._windows.find(win => win !== focus);
+        if (focus === undefined || other === undefined) return;
 
-        let other = this._windows.find(win => win !== focus.window);
-
-        let monitor = focus.window.get_monitor();
-        let workspace = focus.window.get_workspace();
-        let workarea = workspace.get_work_area_for_monitor(monitor);
-
-        let focusRect = focus.window.get_frame_rect();
-        let otherRect = other.window.get_frame_rect();
-        console.info('focus:', focus.window.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
-            'other:', other.window.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
+        let workarea = Utils.getMonitorWorkarea(focus);
+        let focusRect = focus.get_frame_rect();
+        let otherRect = other.get_frame_rect();
         const gap = this._gap;
-        if (focusRect.x < otherRect.x) {
-            other.window.move_frame(true, focusRect.x + focusRect.width + gap, otherRect.y);
-            other.window.move_resize_frame(true, focusRect.x + focusRect.width + gap, otherRect.y, workarea.x + workarea.width - focusRect.x - focusRect.width - gap, otherRect.height);
-        } else if (focusRect.x > otherRect.x) {
-            other.window.move_frame(true, otherRect.x, otherRect.y);
-            other.window.move_resize_frame(true, otherRect.x, otherRect.y, focusRect.x - otherRect.x - gap, otherRect.height);
-        } else if (focusRect.y < otherRect.y) {
-            other.window.move_frame(true, otherRect.x, focusRect.y + focusRect.height + gap);
-            other.window.move_resize_frame(true, otherRect.x, focusRect.y + focusRect.height + gap, otherRect.width, workarea.y + workarea.height - focusRect.y - focusRect.height - gap);
-        } else if (focusRect.y > otherRect.y) {
-            other.window.move_frame(true, otherRect.x, otherRect.y);
-            other.window.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, focusRect.y - otherRect.y - gap);
+
+        if (this._tile !== this._nextTile) {
+            this._tile = this._nextTile;
+            focus.raise();
+            other.raise();
+            if (this._tile === 'SLTR') {
+                // source left target right
+                focusRect = new Mtk.Rectangle({
+                    x: workarea.x, y: workarea.y, width: (workarea.width - gap) / 2, height: workarea.height});
+            } else if (this._tile === 'TLSR') {
+                focusRect = new Mtk.Rectangle({
+                    x: workarea.x + workarea.width / 2 + gap / 2, y: workarea.y, width: (workarea.width - gap) / 2, height: workarea.height});
+            } else if (this._tile === 'STTB') {
+                // source top target bottom
+                focusRect = new Mtk.Rectangle({
+                    x: workarea.x, y: workarea.y, width: workarea.width, height: (workarea.height - gap) / 2});
+            } else if (this._tile === 'TTSB') {
+                focusRect = new Mtk.Rectangle({
+                    x: workarea.x, y: workarea.y + workarea.height / 2 + gap / 2, width: workarea.width, height: (workarea.height - gap) / 2});
+            }
         }
+
+        if (focusRect.width !== workarea.width) {
+            const otherX = focusRect.x > workarea.x ? workarea.x : focusRect.x + focusRect.width + gap;
+            otherRect = new Mtk.Rectangle({
+                x: otherX, y: workarea.y, width: workarea.width - focusRect.width - gap, height: workarea.height});
+        } else {
+            const otherY = focusRect.y > workarea.y ? workarea.y : focusRect.y + focusRect.height + gap;
+            otherRect = new Mtk.Rectangle({
+                x: workarea.x, y: otherY, width: workarea.width, height: workarea.height - focusRect.height - gap});
+        }
+
+        focus.move_frame(true, focusRect.x, focusRect.y);
+        focus.move_resize_frame(true, focusRect.x, focusRect.y, focusRect.width, focusRect.height);
+        other.move_frame(true, otherRect.x, otherRect.y);
+        other.move_resize_frame(true, otherRect.x, otherRect.y, otherRect.width, otherRect.height);
+
+        Utils.log('focus:', focus.get_title(), focusRect.x, focusRect.y, focusRect.width, focusRect.height,
+            'other:', other.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
+    }
+
+    clear() {
+        this._windows = [];
+        this._tile = "none";
+        this._nextTile = "none"
+        this._savedWindowRects.clear();
     }
 
     setGap(gap) {
         this._gap = gap;
     }
+
+    setTile(tile) {
+        this._nextTile = tile;
+    }
+
+    saveWindowRect(metaWindow) {
+        const id = metaWindow.get_id();
+        if (this._savedWindowRects.has(id)) return;
+
+        this._savedWindowRects.set(id, metaWindow.get_frame_rect());
+    }
+
+    restoreWindowRect(id) {
+        const rect = this._savedWindowRects.get(id);
+        if (rect === undefined) return;
+        this._savedWindowRects.delete(id);
+
+        Utils.getMetaWindow(id)?.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
+    }
 }
 
 class Utils {
-    static isMaximized(metaWindow) {
-        if (metaWindow.get_maximized !== undefined) {
-            // <= gnome48
-            return metaWindow.get_maximized();
-        } else {
-            return metaWindow.get_maximize_flags() === Meta.MaximizeFlags.HORIZONTAL
-                || metaWindow.get_maximize_flags() === Meta.MaximizeFlags.VERTICAL
-                || metaWindow.get_maximize_flags() === Meta.MaximizeFlags.BOTH;
+    static log(...args) {
+        if (DragnTileExtension._debug) {
+            console.log(...args);
         }
     }
 
@@ -109,8 +151,17 @@ class Utils {
             metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
         } else {
             metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
-            metaWindow.unmaximize();
         }
+    }
+
+    static getMonitorWorkarea(metaWindow) {
+        const monitor = metaWindow.get_monitor();
+        const workspace = metaWindow.get_workspace();
+        return workspace.get_work_area_for_monitor(monitor);
+    }
+
+    static getMetaWindow(id) {
+        return global.get_window_actors().find(actor => id === actor.get_meta_window().get_id())?.get_meta_window();
     }
 }
 
@@ -129,12 +180,11 @@ export default class DragnTileExtension extends Extension {
         });
 
         this._tile = 'none';
-        this._source = null;
-        this._target = null;
-        this._restoreList = {};
+        this._dropId = undefined;
+        this._targetId = undefined;
 
-        this._shellwm =  global.window_manager;
-        this._sizechangeId = null;
+        this._sizechangeId = new Map();
+        this._positionChangeIds = new Map();
         this._layoutManager = new TileLayout();
 
         // Create a new GSettings object
@@ -162,153 +212,93 @@ export default class DragnTileExtension extends Extension {
         DND.removeDragMonitor(this._dragMonitor);
         this._dragMonitor = undefined;
         this._settings = null;
-        this._shellwm =  null;
         this._layoutManager = null;
 
-        this._tileTip?.destroy();
+        this._tileTip.destroy();
         this._tileTip = null;
-
-        if (this._timeoutId) {
-            GLib.Source.remove(this._timeoutId);
-            delete this._timeoutId;
-        }
-
-        this._source = null;
-        this._target = null;
-    }
-
-    _log(...args) {
-        if (this._debug.get_boolean()) {
-            console.log(...args);
-        }
     }
 
     _onDragDrop(event) {
-        if (Main.overview._shownState !== 'SHOWN') return DND.DragDropResult.CONTINUE;
-
-        if (this._tile !== 'none' && this._target instanceof WindowPreview && this._source instanceof WindowPreview) {
-            this._log('DragnTileExtension.upon-app ', this._source.get_name(), ' on ', this._target.get_name());
-            this._layoutManager.clear();
-            if (this._sizechangeId != null) {
-                this._shellwm.disconnect(this._sizechangeId);
-                this._sizechangeId = null;
-            }
-
-            let monitor = this._target.metaWindow.get_monitor();
-            let workspace = this._target.metaWindow.get_workspace();
-            let monitorWorkArea = workspace.get_work_area_for_monitor(monitor);
-
-            let srcMetaWin = this._source.metaWindow;
-            let tgtMetaWin = this._target.metaWindow;
-            let savedSrcRect = srcMetaWin.get_frame_rect();
-            if (Utils.isMaximized(srcMetaWin) || this._restoreList[srcMetaWin.get_id()] !== undefined) {
-                // if the window is in maximize or split state before trigger a new split,
-                // to make it simple, we just shrink saved windows size by 0.7
-                savedSrcRect.width = savedSrcRect.width * 0.7;
-                savedSrcRect.height = savedSrcRect.height * 0.7;
-            }
-            let savedTgtRect = tgtMetaWin.get_frame_rect();
-            if (Utils.isMaximized(tgtMetaWin) || this._restoreList[tgtMetaWin.get_id()] !== undefined) {
-                savedTgtRect.width = savedTgtRect.width * 0.7;
-                savedTgtRect.height = savedTgtRect.height * 0.7;
-            }
-
-            if (this._restoreList[srcMetaWin.get_id()] !== undefined) {
-                srcMetaWin.disconnect(this._restoreList[srcMetaWin.get_id()]);
-                delete this._restoreList[srcMetaWin.get_id()];
-            }
-            if (this._restoreList[tgtMetaWin.get_id()] !== undefined) {
-                tgtMetaWin.disconnect(this._restoreList[tgtMetaWin.get_id()]);
-                delete this._restoreList[tgtMetaWin.get_id()];
-            }
-
-            // active a window to quit overview
-            this._target._activate();
-            // make windows moveable and resizeable
-            Utils.unmaximize(tgtMetaWin);
-            Utils.unmaximize(srcMetaWin);
-
-            this._overviewHiddenId = Main.overview.connect('hidden', () => {
-                const gap = this._gap;
-                tgtMetaWin.raise();
-                srcMetaWin.raise();
-                if (this._tile === 'SLTR') {
-                    // source left target right
-                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                } else if (this._tile === 'TLSR') {
-                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x + monitorWorkArea.width/2 + gap/2, monitorWorkArea.y, monitorWorkArea.width/2 - gap/2, monitorWorkArea.height);
-                } else if (this._tile === 'STTB') {
-                    // source top target bottom
-                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                } else if (this._tile === 'TTSB') {
-                    tgtMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                    srcMetaWin.move_resize_frame(false, monitorWorkArea.x, monitorWorkArea.y + monitorWorkArea.height/2 + gap/2, monitorWorkArea.width, monitorWorkArea.height/2 - gap/2);
-                }
-
-                Main.overview.disconnect(this._overviewHiddenId);
-            });
-
-            if (this._timeoutId) {
-                GLib.Source.remove(this._timeoutId);
-                delete this._timeoutId;
-            }
-
-            let tgtId = tgtMetaWin.get_id();
-            let srcId = srcMetaWin.get_id();
-            let restoreWindow = (metaWin) => {
-                let monitor = metaWin.get_monitor();
-                let workspace = metaWin.get_workspace();
-                let workarea = workspace.get_work_area_for_monitor(monitor);
-                const wf = metaWin.get_frame_rect();
-
-                // it doesn't quit tiling
-                if (wf.x === workarea.x || wf.y === workarea.y) return;
-
-                let metaWinSrc = global.get_window_actors().find(actor => srcId === actor.get_meta_window().get_id())?.get_meta_window();
-                if (metaWinSrc !== undefined) {
-                    metaWinSrc.move_resize_frame(false, savedSrcRect.x, savedSrcRect.y, savedSrcRect.width, savedSrcRect.height);
-                    metaWinSrc.disconnect(this._restoreList[srcMetaWin.get_id()]);
-                    delete this._restoreList[srcId];
-                }
-
-                let metaWinTgt = global.get_window_actors().find(actor => tgtId === actor.get_meta_window().get_id())?.get_meta_window();
-                if (metaWinTgt !== undefined) {
-                    metaWinTgt.move_resize_frame(false, savedTgtRect.x, savedTgtRect.y, savedTgtRect.width, savedTgtRect.height);
-                    metaWinTgt.disconnect(this._restoreList[tgtMetaWin.get_id()]);
-                    delete this._restoreList[tgtMetaWin.get_id()];
-                }
-
-                this._shellwm.disconnect(this._sizechangeId);
-                this._sizechangeId = null;
-
-                this._tile = 'none';
-            }
-
-            // wait for complete of the window animation
-            this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                // quit splt state when window position changes
-                this._restoreList[srcMetaWin.get_id()] = srcMetaWin.connect('position-changed', restoreWindow.bind(this));
-                this._restoreList[tgtMetaWin.get_id()] = tgtMetaWin.connect('position-changed', restoreWindow.bind(this));
-                this._sizechangeId = this._shellwm.connect('size-changed', this._sizeChangedWindow.bind(this));
-
-                this._layoutManager.update(tgtMetaWin, 1, 1);
-                this._layoutManager.update(srcMetaWin, 1, 1);
-
-                delete this._timeoutId;
-                return GLib.SOURCE_REMOVE;
-            });
-        }
-
         // clear extension states when drag and drop
-        this._tileTip?.hide();
-        //this._tile = 'none';
-        // release window resource
-        this._source = null;
-        this._target = null;
+        this._tileTip.hide();
+
+        // if not a WindowPreview on top of DragnTileTip
+        if (Main.overview._shownState !== 'SHOWN'
+            || this._tile === 'none'
+            || !(event.dropActor instanceof WindowPreview)
+            || event.targetActor.get_name() !== "DragnTileTip"
+            || Utils.getMetaWindow(this._dropId) === undefined
+            || Utils.getMetaWindow(this._targetId) === undefined)
+            return DND.DragDropResult.CONTINUE;
+        Utils.log('DragnTileExtension.upon-app ', Utils.getMetaWindow(this._dropId).get_title(),
+            ' on ', Utils.getMetaWindow(this._targetId).get_title());
+
+        this._hiddenId = Main.overview.connect('hidden', this.enterTile.bind(this));
+        // active a window to quit overview
+        event.dropActor._activate();
+        // make windows moveable and resizeable
+        Utils.unmaximize(Utils.getMetaWindow(this._dropId));
+        Utils.unmaximize(Utils.getMetaWindow(this._targetId));
+
+        // wait for complete of the window animation
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            this.registerWindowEvent();
+            return GLib.SOURCE_REMOVE;
+        });
         return DND.DragDropResult.CONTINUE;
+    }
+
+    registerWindowEvent() {
+        const dropWindow = Utils.getMetaWindow(this._dropId);
+        const targetWindow = Utils.getMetaWindow(this._targetId);
+        if (dropWindow === undefined || targetWindow === undefined) return;
+
+        // quit tile state when window position changes
+        this._positionChangeIds.set(this._dropId, dropWindow.connect('position-changed', this.checkQuitTile.bind(this)));
+        this._positionChangeIds.set(this._targetId, targetWindow.connect('position-changed', this.checkQuitTile.bind(this)));
+        // change other windows' size after a window is changed
+        this._sizechangeId.set(this._dropId, dropWindow.connect('size-changed', this.sizeChangedWindow.bind(this)));
+        this._sizechangeId.set(this._targetId, targetWindow.connect('size-changed', this.sizeChangedWindow.bind(this)));
+    }
+
+    enterTile() {
+        const dropWindow = Utils.getMetaWindow(this._dropId);
+        const targetWindow = Utils.getMetaWindow(this._targetId);
+        if (dropWindow === undefined || targetWindow === undefined) return;
+
+        this._layoutManager.clear();
+        this._layoutManager.add(dropWindow);
+        this._layoutManager.add(targetWindow);
+        this._layoutManager.saveWindowRect(dropWindow);
+        this._layoutManager.saveWindowRect(targetWindow);
+        this._layoutManager.setTile(this._tile);
+
+        this._layoutManager.relayout();
+        // we only need notified once
+        Main.overview.disconnect(this._hiddenId);
+    }
+
+    checkQuitTile(triggerWindow) {
+        const workarea = Utils.getMonitorWorkarea(triggerWindow);
+        const wf = triggerWindow.get_frame_rect();
+        // it doesn't quit tiling
+        if (wf.x === workarea.x || wf.y === workarea.y) return;
+
+        this._positionChangeIds.forEach((value, key, map) => {
+            Utils.getMetaWindow(key)?.disconnect(value);
+        });
+        this._positionChangeIds.clear();
+
+        this._sizechangeId.forEach((value, key, map) => {
+            Utils.getMetaWindow(key)?.disconnect(value);
+        });
+        this._sizechangeId.clear();
+
+        this._layoutManager.restoreWindowRect(this._dropId);
+        this._layoutManager.restoreWindowRect(this._targetId);
+        this._layoutManager.clear();
+
+        this._tile = 'none';
     }
 
     _onDragMotion(event) {
@@ -318,30 +308,26 @@ export default class DragnTileExtension extends Extension {
         if (!(source instanceof WindowPreview)) {
             return DND.DragMotionResult.CONTINUE;
         }
-        this._source = source;
 
         // if drag point intersects any WindowPreview
-        let { tile: tile, preview: windowpreview } = this._getWindowTile(source._workspace, event);
+        let { tile: tile, preview: targetPreview } = this._getWindowTile(source._workspace, event);
         let tileChanged = !(this._tile === tile);
         this._tile = tile;
-        this._target = windowpreview;
         if (this._tile === 'none') {
-            this._tileTip?.hide();
+            this._tileTip.hide();
             return DND.DragMotionResult.CONTINUE;
         }
+        this._dropId = source.metaWindow.get_id();
+        this._targetId = targetPreview.metaWindow.get_id();
 
-        this._log('DragnTileExtension.drag', source.get_name(),
+        Utils.log('DragnTileExtension.drag', source.get_name(),
             ', point', event.x, event.y,
-            ', Preview', windowpreview?.get_name(),
+            ', Preview', targetPreview?.get_name(),
             ', tilemode', this._tile);
 
 
         if (tileChanged) {
-            // Here tileTip is on top of target preview. Hide it first to
-            // let drag event pass in a target preview window.
-            this._tileTip?.hide();
-
-            let target = this._target;
+            const target = targetPreview;
             let dstBound = undefined;
             const topleft = new Graphene.Point3D({x: 0, y: 0});
             const rightbottom = new Graphene.Point3D({x: target.get_width(), y: target.get_height()});
@@ -374,39 +360,29 @@ export default class DragnTileExtension extends Extension {
                     width: (right - left),
                     height: (bottom - top) / 2});
             }
-            this._log('DragnTileExtension.drag: dst', dstBound?.x, dstBound?.y, dstBound?.width, dstBound?.height);
+            Utils.log('DragnTileExtension.drag: dst', dstBound?.x, dstBound?.y, dstBound?.width, dstBound?.height);
 
-            while (target && dstBound !== undefined) {
-                if (target instanceof WindowPreview) {
-                    if (this._tileTip) {
-                        this._tileTip.hide();
-                    }
-
-                    this._tileTip.set_position(left, top);
-                    this._tileTip.set_size(right - left, bottom - top);
-                    // TODO: Here set_child we meets an error message. It seems harmless but fix it later
-                    Main.uiGroup.add_child(this._tileTip);
-                    Main.uiGroup.set_child_above_sibling(this._tileTip, null);
-                    // put dnd on top of tileTip
-                    if (source._draggable && source._draggable._dragActor) {
-                        Main.uiGroup.set_child_above_sibling(source._draggable._dragActor, null);
-                    }
-
-                    this._tileTip.show();
-                    this._tileTip.ease({
-                        x: dstBound.x,
-                        y: dstBound.y,
-                        width: dstBound.width,
-                        height: dstBound.height,
-                        opacity: 255,
-                        duration: WINDOW_ANIMATION_TIME,
-                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                    });
-                    this._log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
-                    break;
-                }
-                target = target.get_parent();
+            this._tileTip.set_position(left, top);
+            this._tileTip.set_size(right - left, bottom - top);
+            // TODO: Here set_child we meets an error message. It seems harmless but fix it later
+            Main.uiGroup.add_child(this._tileTip);
+            Main.uiGroup.set_child_above_sibling(this._tileTip, null);
+            // put dnd on top of tileTip
+            if (source._draggable && source._draggable._dragActor) {
+                Main.uiGroup.set_child_above_sibling(source._draggable._dragActor, null);
             }
+
+            this._tileTip.show();
+            this._tileTip.ease({
+                x: dstBound.x,
+                y: dstBound.y,
+                width: dstBound.width,
+                height: dstBound.height,
+                opacity: 255,
+                duration: WINDOW_ANIMATION_TIME,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+            Utils.log('DragnTileExtension.drag tiletip bounds', dstBound.x, dstBound.y, dstBound.width, dstBound.height);
         }
 
         // always listen dragmotion event
@@ -455,18 +431,14 @@ export default class DragnTileExtension extends Extension {
                 } else if (event.y > y1 && event.y < y2) {
                     ret = {tile: 'TLSR', preview: window};
                 }
-                if (ret.tile !== 'none') {
-                    break;
-                }
+                break;
             }
         }
         return ret;
     }
 
-    _sizeChangedWindow(shellwm, actor) {
-        if (!(actor instanceof Meta.WindowActor) || this._tile === 'none') return;
-        if (!this._layoutManager.isManaged(actor.get_meta_window())) return;
-
+    sizeChangedWindow(metaWindow) {
+        if (this._tile === 'none' || !this._layoutManager.isManaged(metaWindow)) return;
         this._layoutManager.relayout();
     }
 }
