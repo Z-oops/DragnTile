@@ -239,6 +239,8 @@ export default class DragnTileExtension extends Extension {
         // make windows moveable and resizeable
         Utils.unmaximize(Utils.getMetaWindow(this._dropId));
         Utils.unmaximize(Utils.getMetaWindow(this._targetId));
+        Utils.getMetaWindow(this._dropId).unminimize();
+        Utils.getMetaWindow(this._targetId).unminimize();
 
         // wait for complete of the window animation
         GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
