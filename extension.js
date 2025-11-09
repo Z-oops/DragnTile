@@ -216,6 +216,7 @@ export default class DragnTileExtension extends Extension {
 
         this._tileTip.destroy();
         this._tileTip = null;
+        this.tryDisconnect(this.timeoutId);
     }
 
     _onDragDrop(event) {
@@ -243,11 +244,17 @@ export default class DragnTileExtension extends Extension {
         Utils.getMetaWindow(this._targetId).unminimize();
 
         // wait for complete of the window animation
-        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+        this.tryDisconnect(this.timeoutId);
+        this.timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this.registerWindowEvent();
+            this.timeoutId = undefined;
             return GLib.SOURCE_REMOVE;
         });
         return DND.DragDropResult.CONTINUE;
+    }
+
+    tryDisconnect(timerId) {
+        if (timerId) GLib.Source.remove(timerId);
     }
 
     registerWindowEvent() {
