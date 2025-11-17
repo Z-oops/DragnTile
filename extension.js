@@ -106,11 +106,12 @@ class TileLayout {
             'other:', other.get_title(), otherRect.x, otherRect.y, otherRect.width, otherRect.height);
     }
 
-    clear() {
+    clear(clearSavedRects) {
         this._windows = [];
         this._tile = "none";
         this._nextTile = "none"
-        this._savedWindowRects.clear();
+        if (clearSavedRects)
+            this._savedWindowRects.clear();
     }
 
     setGap(gap) {
@@ -275,7 +276,7 @@ export default class DragnTileExtension extends Extension {
         const targetWindow = Utils.getMetaWindow(this._targetId);
         if (dropWindow === undefined || targetWindow === undefined) return;
 
-        this._layoutManager.clear();
+        this._layoutManager.clear(false);
         this._layoutManager.add(dropWindow);
         this._layoutManager.add(targetWindow);
         this._layoutManager.saveWindowRect(dropWindow);
@@ -296,7 +297,7 @@ export default class DragnTileExtension extends Extension {
         this._positionChangeIds.forEach((value, key, map) => {
             Utils.getMetaWindow(key)?.disconnect(value);
         });
-        this._positionChangeIds.clear();
+        this._positionChangeIds.clear(true);
 
         this._sizechangeId.forEach((value, key, map) => {
             Utils.getMetaWindow(key)?.disconnect(value);
