@@ -31,6 +31,12 @@ export default class DragnTilePreferences extends ExtensionPreferences {
         }));
         group.add(spin);
 
+        const aroundRow = new Adw.SwitchRow({
+            title: _('Add gap around windows'),
+            subtitle: _('Apply gap to window edges'),
+        });
+        group.add(aroundRow);
+
         const row = new Adw.SwitchRow({
             title: _('debug'),
             subtitle: _('Enable debug log'),
@@ -39,9 +45,11 @@ export default class DragnTilePreferences extends ExtensionPreferences {
 
         // Create a settings object and bind the row to the `show-indicator` key
         window._settings = this.getSettings();
-        window._settings.bind('debug', row, 'active',
-            Gio.SettingsBindFlags.DEFAULT);
         window._settings.bind('window-gap', spin, 'value',
+            Gio.SettingsBindFlags.DEFAULT);
+        window._settings.bind('around', aroundRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        window._settings.bind('debug', row, 'active',
             Gio.SettingsBindFlags.DEFAULT);
     }
 }

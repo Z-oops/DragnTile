@@ -34,6 +34,7 @@ class TileLayout {
     constructor() {
         this._windows = [];
         this._gap = 2;
+        this.around = false;
         this._tile = "none";
         this._nextTile = "none"
         this._savedWindowRects = new Map();
@@ -46,6 +47,17 @@ class TileLayout {
     add(metaWindow) {
         this._windows = this._windows.filter(win => win !== metaWindow);
         this._windows.push(metaWindow);
+    }
+
+    getTileWorkarea(focusWindow) {
+        let workarea = Utils.getMonitorWorkarea(focusWindow);
+        let edgeGap = this.around ? this._gap : 0;
+        return new Mtk.Rectangle({
+                    x: workarea.x + edgeGap,
+                    y: workarea.y + edgeGap,
+                    width: workarea.width - 2 * edgeGap,
+                    height: workarea.height - 2 * edgeGap
+                });       
     }
 
     relayout() {
@@ -61,7 +73,7 @@ class TileLayout {
         let other = this._windows.find(win => win !== focus);
         if (focus === undefined || other === undefined) return;
 
-        let workarea = Utils.getMonitorWorkarea(focus);
+        let workarea = this.getTileWorkarea(focus);
         let focusRect = focus.get_frame_rect();
         let otherRect = other.get_frame_rect();
         const gap = this._gap;
@@ -116,6 +128,10 @@ class TileLayout {
 
     setGap(gap) {
         this._gap = gap;
+    }
+
+    setAround(around) {
+        this.around = around;
     }
 
     setTile(tile) {
@@ -212,7 +228,16 @@ export default class DragnTileExtension extends Extension {
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
 
+        this.around = this._settings.get_value('around').get_boolean();
+        this._settings.connect('changed::around', (settings, key) => {
+            this.around = settings.get_value(key).get_boolean();
+            this._layoutManager.setAround(this.around);
+            this._layoutManager.relayout();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
         this._layoutManager.setGap(this._gap);
+        this._layoutManager.setAround(this.around);
     }
 
     disable() {
@@ -298,7 +323,7 @@ export default class DragnTileExtension extends Extension {
     }
 
     checkQuitTile(triggerWindow) {
-        const workarea = Utils.getMonitorWorkarea(triggerWindow);
+        const workarea = this._layoutManager.getTileWorkarea(triggerWindow);
         const wf = triggerWindow.get_frame_rect();
         // it doesn't quit tiling
         if (wf.x === workarea.x || wf.y === workarea.y) return;

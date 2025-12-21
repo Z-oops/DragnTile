@@ -4,6 +4,9 @@
     <key name="window-gap" type="i">
       <default>2</default>
     </key>
+    <key name="around" type="b">
+      <default>false</default>
+    </key>
     <key name="debug" type="b">
       <default>false</default>
     </key>
