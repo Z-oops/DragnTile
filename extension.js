@@ -164,6 +164,12 @@ class Utils {
     static getMetaWindow(id) {
         return global.get_window_actors().find(actor => id === actor.get_meta_window().get_id())?.get_meta_window();
     }
+
+    static minimizeMetaWindows(excludes) {
+        global.get_window_actors().forEach(actor => {
+                if (!excludes.includes(actor.get_meta_window().get_id())) actor.get_meta_window().minimize();
+            });
+    }
 }
 
 export default class DragnTileExtension extends Extension {
@@ -234,6 +240,9 @@ export default class DragnTileExtension extends Extension {
             return DND.DragDropResult.CONTINUE;
         Utils.log('DragnTileExtension.upon-app ', Utils.getMetaWindow(this._dropId).get_title(),
             ' on ', Utils.getMetaWindow(this._targetId).get_title());
+
+        // hide other windows
+        Utils.minimizeMetaWindows([this._dropId, this._targetId]);
 
         this._hiddenId = Main.overview.connect('hidden', this.enterTile.bind(this));
         // active a window to quit overview
