@@ -21,6 +21,8 @@ import St from 'gi://St';
 import Graphene from 'gi://Graphene';
 import Mtk from 'gi://Mtk';
 import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
+import Gio from 'gi://Gio';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
@@ -29,6 +31,378 @@ import {WindowPreview} from 'resource:///org/gnome/shell/ui/windowPreview.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
+
+class DesktopPreview {
+    constructor() {
+        this._screenshotPath = null;
+        this._previewBox = null;
+        this._textureCache = St.TextureCache.get_default();
+        this._screenshot = new Shell.Screenshot();
+        this._showId = null;
+        this._fakeMetaWindow = null;
+        console.log('[DesktopPreview] Constructor called - initialized');
+    }
+
+    _createFakeMetaWindow() {
+        console.log('[DesktopPreview] Creating fake metaWindow');
+        return {
+            get_stable_sequence: () => 999999,
+            showing_on_its_workspace: () => true,
+            connect: () => 0,
+            disconnect: () => {},
+            get_monitor: () => 0,
+            get_workspace: () => null,
+            get_frame_rect: () => ({x: 0, y: 0, width: 320, height: 180}),
+            get_buffer_rect: () => ({x: 0, y: 0, width: 320, height: 180}),
+            get_id: () => -1,
+            get_title: () => 'Desktop Preview',
+            is_hidden: () => false,
+        };
+    }
+
+    async _captureDesktop() {
+        console.log('[DesktopPreview] _captureDesktop() started');
+        try {
+            // Create a temp file path
+            const timestamp = Date.now();
+            const path = `/tmp/screenshot-${timestamp}.png`;
+            console.log('[DesktopPreview] Target path:', path);
+            
+            // Create the file
+            const file = Gio.File.new_for_path(path);
+            console.log('[DesktopPreview] File object created');
+            
+            // Create a stream to write to
+            const stream = file.create(Gio.FileCreateFlags.NONE, null);
+            console.log('[DesktopPreview] Output stream created');
+            
+            // Now call screenshot with the stream
+            console.log('[DesktopPreview] Calling screenshot(false, stream, null)...');
+            try {
+                const result = await this._screenshot.screenshot(false, stream, null);
+                console.log('[DesktopPreview] screenshot() completed, result:', result);
+            } catch (screenshotError) {
+                console.error('[DesktopPreview] screenshot() threw error:', screenshotError);
+                throw screenshotError;
+            }
+            
+            // Close the stream
+            try {
+                stream.close(null);
+                console.log('[DesktopPreview] Stream closed');
+            } catch (e) {
+                console.warn('[DesktopPreview] Error closing stream:', e);
+            }
+            
+            console.log('[DesktopPreview] Desktop screenshot captured:', path);
+            
+            // Verify file was created
+            const checkFile = Gio.File.new_for_path(path);
+            const exists = checkFile.query_exists(null);
+            console.log('[DesktopPreview] Screenshot file exists:', exists);
+            
+            if (!exists) {
+                console.warn('[DesktopPreview] Screenshot file was not created!');
+                return null;
+            }
+            
+            this._screenshotPath = path;
+            return path;
+        } catch (error) {
+            console.error('[DesktopPreview] Desktop screenshot error:', error);
+            console.error('[DesktopPreview] Error message:', error.message);
+            console.error('[DesktopPreview] Error stack:', error.stack);
+            Utils.log('Desktop screenshot error:', error);
+            return null;
+        }
+    }
+
+    _createPreviewUI() {
+        console.log('[DesktopPreview] _createPreviewUI() called');
+        console.log('[DesktopPreview] Screenshot path:', this._screenshotPath);
+        
+        if (!this._screenshotPath) {
+            console.warn('[DesktopPreview] Screenshot path is null, returning null');
+            return null;
+        }
+
+        try {
+            console.log('[DesktopPreview] Creating preview actor');
+            
+            // Create a container actor with necessary properties
+            const actor = new Clutter.Actor({
+                name: 'DesktopPreviewActor',
+                layout_manager: new Clutter.BinLayout(),
+                reactive: true,
+                x_expand: false,
+                y_expand: false,
+            });
+            
+            // Set a reasonable initial size
+            actor.set_size(320, 180);
+            console.log('[DesktopPreview] Actor initial size set to 320x180');
+            
+            // Add all properties and methods that WorkspaceLayout expects
+            console.log('[DesktopPreview] Adding WorkspaceLayout-compatible interface');
+            
+            this._fakeMetaWindow = this._createFakeMetaWindow();
+            
+            actor.chromeHeights = function() {
+                return [0, 0];
+            };
+            
+            actor.chromeWidths = function() {
+                return [0, 0];
+            };
+            
+            actor.overlapHeights = function() {
+                return [0, 0];
+            };
+            
+            actor.boundingBox = {
+                x: 0,
+                y: 0,
+                width: 320,
+                height: 180,
+            };
+            
+            actor.windowCenter = {
+                x: 160,
+                y: 90,
+            };
+            
+            actor.visible = true;
+            actor.metaWindow = this._fakeMetaWindow;
+            
+            // Create a container for styling
+            const container = new St.BoxLayout({
+                style_class: 'dragnTile-desktop-preview-container',
+                vertical: false,
+                x_expand: true,
+                y_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            
+            console.log('[DesktopPreview] Container created');
+            
+            // Try to create an icon actor
+            try {
+                console.log('[DesktopPreview] Creating St.Icon for preview');
+                const icon = new St.Icon({
+                    icon_size: 160,
+                    x_expand: true,
+                    y_expand: true,
+                });
+                
+                const gicon = Gio.icon_new_for_string(this._screenshotPath);
+                icon.set_gicon(gicon);
+                console.log('[DesktopPreview] Icon set with screenshot');
+                
+                container.add_child(icon);
+            } catch (iconError) {
+                console.warn('[DesktopPreview] Icon creation failed:', iconError);
+                
+                // Fallback to text label
+                const label = new St.Label({
+                    text: '📸 Desktop',
+                    style_class: 'dragnTile-desktop-preview-text',
+                });
+                container.add_child(label);
+                console.log('[DesktopPreview] Using fallback label');
+            }
+            
+            actor.add_child(container);
+            console.log('[DesktopPreview] Preview actor created successfully');
+            console.log('[DesktopPreview] Actor actual size:', actor.get_size());
+            
+            this._previewBox = actor;
+            return actor;
+        } catch (error) {
+            console.error('[DesktopPreview] Error creating preview UI:', error);
+            console.error('[DesktopPreview] UI error message:', error.message);
+            return null;
+        }
+    }
+
+    async show() {
+        try {
+            console.log('[DesktopPreview] show() - START');
+            
+            // Capture screenshot
+            console.log('[DesktopPreview] show() - About to call _captureDesktop');
+            const path = await this._captureDesktop();
+            console.log('[DesktopPreview] show() - After _captureDesktop, path:', path);
+            
+            if (!path) {
+                console.warn('[DesktopPreview] show() - No path received');
+                return;
+            }
+            
+            console.log('[DesktopPreview] show() - Success, path is:', path);
+            
+            // Create preview UI
+            const previewUI = this._createPreviewUI();
+            console.log('[DesktopPreview] show() - Preview UI created:', previewUI);
+            
+            if (!previewUI) {
+                console.warn('[DesktopPreview] show() - Failed to create preview UI');
+                return;
+            }
+            
+            let added = false;
+            
+            // Try to find the Workspace object and add to its _container
+            // This is the container that holds window previews
+            try {
+                console.log('[DesktopPreview] show() - Searching for Workspace');
+                
+                if (!Main.overview?._overview?.controls?._workspacesDisplay) {
+                    console.warn('[DesktopPreview] show() - workspacesDisplay not found');
+                    throw new Error('workspacesDisplay is null');
+                }
+                
+                const display = Main.overview._overview.controls._workspacesDisplay;
+                console.log('[DesktopPreview] show() - WorkspacesDisplay found');
+                console.log('[DesktopPreview] show() - _workspacesViews length:', display._workspacesViews?.length);
+                
+                // Get the active workspace index
+                const workspaceManager = global.workspace_manager;
+                const activeIndex = workspaceManager.get_active_workspace_index();
+                console.log('[DesktopPreview] show() - Active workspace index:', activeIndex);
+                
+                // Get the WorkspacesView for the primary monitor (where the active workspace is shown)
+                if (!display._workspacesViews || display._workspacesViews.length === 0) {
+                    console.warn('[DesktopPreview] show() - No workspaces views found');
+                    throw new Error('WorkspacesViews is empty');
+                }
+                
+                // Get the first WorkspacesView (primary monitor)
+                const workspacesView = display._workspacesViews[0];
+                console.log('[DesktopPreview] show() - WorkspacesView found');
+                console.log('[DesktopPreview] show() - workspacesView._workspaces length:', workspacesView._workspaces?.length);
+                
+                // Now get the specific workspace from the WorkspacesView
+                if (!workspacesView._workspaces || !workspacesView._workspaces[activeIndex]) {
+                    console.warn('[DesktopPreview] show() - Workspace not found at index:', activeIndex);
+                    throw new Error('Workspace not found in WorkspacesView');
+                }
+                
+                const workspace = workspacesView._workspaces[activeIndex];
+                console.log('[DesktopPreview] show() - Workspace found');
+                
+                // Add to the workspace's own _container via the layout manager
+                // The _container has a WorkspaceLayout which needs to know about our preview
+                if (workspace._container) {
+                    console.log('[DesktopPreview] show() - Found workspace._container');
+                    
+                    // Call addWindow on the layout manager to properly register the preview
+                    const layoutManager = workspace._container.layout_manager;
+                    console.log('[DesktopPreview] show() - Layout manager type:', layoutManager.constructor.name);
+                    
+                    if (layoutManager && layoutManager.addWindow) {
+                        console.log('[DesktopPreview] show() - Calling layoutManager.addWindow()');
+                        console.log('[DesktopPreview] show() - previewUI size before addWindow:', previewUI.get_size());
+                        console.log('[DesktopPreview] show() - previewUI visible:', previewUI.visible);
+                        
+                        // Create a fake metaWindow object for the layout manager
+                        const fakeMetaWindow = {
+                            get_stable_sequence: () => 999999, // High sequence to put it last
+                            showing_on_its_workspace: () => true,
+                            connect: () => 0, // Return a signal ID
+                            disconnect: () => {},
+                        };
+                        layoutManager.addWindow(previewUI, fakeMetaWindow);
+                        console.log('[DesktopPreview] show() - Successfully added via layoutManager.addWindow()');
+                        console.log('[DesktopPreview] show() - previewUI size after addWindow:', previewUI.get_size());
+                        console.log('[DesktopPreview] show() - Number of windows in layout:', layoutManager._windows?.size || 'unknown');
+                        added = true;
+                    } else {
+                        console.log('[DesktopPreview] show() - Layout manager does not have addWindow, adding directly');
+                        workspace._container.add_child(previewUI);
+                        console.log('[DesktopPreview] show() - Added directly to workspace._container');
+                        added = true;
+                    }
+                } else {
+                    console.warn('[DesktopPreview] show() - workspace._container not found');
+                }
+            } catch (error) {
+                console.warn('[DesktopPreview] show() - Error finding workspace container:', error);
+                console.error('[DesktopPreview] show() - Error details:', error.message);
+            }
+            
+            // Fallback: try the overview content
+            if (!added) {
+                try {
+                    console.log('[DesktopPreview] show() - Trying overview content fallback');
+                    if (Main.overview._overview?.content) {
+                        Main.overview._overview.content.add_child(previewUI);
+                        console.log('[DesktopPreview] show() - Added to overview.content');
+                        added = true;
+                    }
+                } catch (error) {
+                    console.warn('[DesktopPreview] show() - Fallback failed:', error);
+                }
+            }
+            
+            // Last resort: add to uiGroup
+            if (!added) {
+                try {
+                    console.log('[DesktopPreview] show() - Last resort: adding to Main.uiGroup');
+                    Main.uiGroup.add_child(previewUI);
+                    console.log('[DesktopPreview] show() - Added to Main.uiGroup');
+                    added = true;
+                } catch (error) {
+                    console.error('[DesktopPreview] show() - All attempts failed:', error);
+                }
+            }
+            
+            console.log('[DesktopPreview] show() - END, added:', added);
+            
+        } catch (error) {
+            console.error('[DesktopPreview] show() - Unexpected error:', error);
+            console.error('[DesktopPreview] show() - Stack:', error.stack);
+        }
+    }
+
+    hide() {
+        console.log('[DesktopPreview] hide() called');
+        if (this._previewBox) {
+            try {
+                console.log('[DesktopPreview] Destroying preview box');
+                // Try to remove from parent first if it has one
+                if (this._previewBox.get_parent()) {
+                    this._previewBox.get_parent().remove_child(this._previewBox);
+                }
+                this._previewBox.destroy();
+                console.log('[DesktopPreview] Preview box destroyed');
+            } catch (e) {
+                console.warn('[DesktopPreview] Error destroying preview box:', e);
+            } finally {
+                this._previewBox = null;
+            }
+        } else {
+            console.log('[DesktopPreview] No preview box to hide');
+        }
+    }
+
+    destroy() {
+        console.log('[DesktopPreview] destroy() called');
+        this.hide();
+        this._screenshot = null;
+        if (this._screenshotPath) {
+            try {
+                console.log('[DesktopPreview] Deleting screenshot file:', this._screenshotPath);
+                Gio.File.new_for_path(this._screenshotPath).delete(null);
+                console.log('[DesktopPreview] Screenshot file deleted');
+            } catch (e) {
+                console.warn('[DesktopPreview] Error deleting screenshot file:', e);
+            }
+            this._screenshotPath = null;
+        }
+        console.log('[DesktopPreview] destroy() completed');
+    }
+}
 
 class TileLayout {
     constructor() {
@@ -238,9 +612,32 @@ export default class DragnTileExtension extends Extension {
 
         this._layoutManager.setGap(this._gap);
         this._layoutManager.setAround(this.around);
+
+        // Initialize desktop preview
+        console.log('[DragnTileExtension] Initializing DesktopPreview');
+        this._desktopPreview = new DesktopPreview();
+        
+        // Connect to overview shown event to show desktop preview
+        console.log('[DragnTileExtension] Connecting to overview shown event');
+        this._overviewShownId = Main.overview.connect('shown', () => {
+            console.log('[DragnTileExtension] Overview shown event triggered');
+            this._desktopPreview.show().catch(error => {
+                console.error('[DragnTileExtension] Error in show():', error);
+            });
+        });
+        console.log('[DragnTileExtension] Overview shown event connected, id:', this._overviewShownId);
+
+        // Connect to overview hidden event to hide desktop preview
+        console.log('[DragnTileExtension] Connecting to overview hidden event');
+        this._overviewHiddenId = Main.overview.connect('hidden', () => {
+            console.log('[DragnTileExtension] Overview hidden event triggered');
+            this._desktopPreview.hide();
+        });
+        console.log('[DragnTileExtension] Overview hidden event connected, id:', this._overviewHiddenId);
     }
 
     disable() {
+        console.log('[DragnTileExtension] disable() called');
         DND.removeDragMonitor(this._dragMonitor);
         this._dragMonitor = undefined;
         this._settings = null;
@@ -249,6 +646,26 @@ export default class DragnTileExtension extends Extension {
         this._tileTip.destroy();
         this._tileTip = null;
         this.tryDisconnect(this.timeoutId);
+
+        // Cleanup desktop preview resources
+        if (this._desktopPreview) {
+            console.log('[DragnTileExtension] Cleaning up desktop preview');
+            this._desktopPreview.destroy();
+            this._desktopPreview = null;
+        }
+
+        // Disconnect overview events
+        if (this._overviewShownId) {
+            console.log('[DragnTileExtension] Disconnecting overview shown event, id:', this._overviewShownId);
+            Main.overview.disconnect(this._overviewShownId);
+            this._overviewShownId = null;
+        }
+        if (this._overviewHiddenId) {
+            console.log('[DragnTileExtension] Disconnecting overview hidden event, id:', this._overviewHiddenId);
+            Main.overview.disconnect(this._overviewHiddenId);
+            this._overviewHiddenId = null;
+        }
+        console.log('[DragnTileExtension] disable() completed');
     }
 
     _onDragDrop(event) {
