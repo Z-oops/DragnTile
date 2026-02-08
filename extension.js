@@ -28,6 +28,7 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { ControlsState } from 'resource:///org/gnome/shell/ui/overviewControls.js';
 import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
+import * as Screenshot from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -61,60 +62,36 @@ class DesktopPreview {
         };
     }
 
-    async _captureDesktop() {
-        console.log('[DesktopPreview] _captureDesktop() started');
+    async captureWorkArea() {
         try {
-            // Create a temp file path
-            const timestamp = Date.now();
-            const path = `/tmp/screenshot-${timestamp}.png`;
-            console.log('[DesktopPreview] Target path:', path);
+            const monitorIndex = global.display.get_current_monitor();
+            const workArea = Main.layoutManager.getWorkAreaForMonitor(monitorIndex);
 
-            // Create the file
-            const file = Gio.File.new_for_path(path);
-            console.log('[DesktopPreview] File object created');
+            const savePath = GLib.build_filenamev([GLib.get_tmp_dir(), `shot_${Date.now()}.png`]);
+            const file = Gio.File.new_for_path(savePath);
+            const outputStream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
 
-            // Create a stream to write to
-            const stream = file.create(Gio.FileCreateFlags.NONE, null);
-            console.log('[DesktopPreview] Output stream created');
-
-            // Now call screenshot with the stream
-            console.log('[DesktopPreview] Calling screenshot(false, stream, null)...');
-            try {
-                const result = await this._screenshot.screenshot(false, stream, null);
-                console.log('[DesktopPreview] screenshot() completed, result:', result);
-            } catch (screenshotError) {
-                console.error('[DesktopPreview] screenshot() threw error:', screenshotError);
-                throw screenshotError;
-            }
-
-            // Close the stream
-            try {
-                stream.close(null);
-                console.log('[DesktopPreview] Stream closed');
-            } catch (e) {
-                console.warn('[DesktopPreview] Error closing stream:', e);
-            }
-
-            console.log('[DesktopPreview] Desktop screenshot captured:', path);
-
-            // Verify file was created
-            const checkFile = Gio.File.new_for_path(path);
-            const exists = checkFile.query_exists(null);
-            console.log('[DesktopPreview] Screenshot file exists:', exists);
-
-            if (!exists) {
-                console.warn('[DesktopPreview] Screenshot file was not created!');
-                return null;
-            }
-
-            this._screenshotPath = path;
-            return path;
-        } catch (error) {
-            console.error('[DesktopPreview] Desktop screenshot error:', error);
-            console.error('[DesktopPreview] Error message:', error.message);
-            console.error('[DesktopPreview] Error stack:', error.stack);
-            Utils.log('Desktop screenshot error:', error);
-            return null;
+            const screenshot = new Shell.Screenshot();
+            return new Promise((resolve, reject) => {
+                //  (x, y, width, height, stream, callback)
+                screenshot.screenshot_area(
+                    workArea.x,
+                    workArea.y,
+                    workArea.width,
+                    workArea.height,
+                    outputStream,
+                    (obj, res) => {
+                        try {
+                            outputStream.close(null);
+                            resolve(savePath);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }
+                );
+            });
+        } catch (err) {
+            console.error('captureWorkArea failed', err);
         }
     }
 
@@ -231,17 +208,7 @@ class DesktopPreview {
             console.log('[DesktopPreview] show() - START');
 
             // Capture screenshot
-            console.log('[DesktopPreview] show() - About to call _captureDesktop');
-            const path = await this._captureDesktop();
-            console.log('[DesktopPreview] show() - After _captureDesktop, path:', path);
-
-            if (!path) {
-                console.warn('[DesktopPreview] show() - No path received');
-                return;
-            }
-
-            console.log('[DesktopPreview] show() - Success, path is:', path);
-
+            await this.captureWorkArea();
             // Create preview UI
             const previewUI = this._createPreviewUI();
             console.log('[DesktopPreview] show() - Preview UI created:', previewUI);
