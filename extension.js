@@ -23,6 +23,8 @@ import Meta from 'gi://Meta';
 import Mtk from 'gi://Mtk';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+import GdkPixbuf from 'gi://GdkPixbuf';
+import Cogl from 'gi://Cogl';
 
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -36,13 +38,16 @@ const WINDOW_ANIMATION_TIME = 250;
 
 class DesktopPreview {
     constructor() {
-        this._screenshotPath = null;
         this._previewBox = null;
         this._textureCache = St.TextureCache.get_default();
         this._screenshot = new Shell.Screenshot();
         this._showId = null;
         this._fakeMetaWindow = null;
         console.log('[DesktopPreview] Constructor called - initialized');
+    }
+
+    static get TILE_SNAPSHOT() {
+        return GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`])
     }
 
     _createFakeMetaWindow() {
@@ -64,10 +69,9 @@ class DesktopPreview {
 
     async captureWorkArea() {
         try {
-            const monitorIndex = global.display.get_current_monitor();
-            const workArea = Main.layoutManager.getWorkAreaForMonitor(monitorIndex);
+            const workArea = Utils.getMonitorWorkarea();
 
-            const savePath = GLib.build_filenamev([GLib.get_tmp_dir(), `shot_${Date.now()}.png`]);
+            const savePath = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`]);
             const file = Gio.File.new_for_path(savePath);
             const outputStream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
 
@@ -92,33 +96,34 @@ class DesktopPreview {
             });
         } catch (err) {
             console.error('captureWorkArea failed', err);
+            return Promise.reject("captureWorkArea failed");
         }
     }
 
     _createPreviewUI() {
         console.log('[DesktopPreview] _createPreviewUI() called');
-        console.log('[DesktopPreview] Screenshot path:', this._screenshotPath);
-
-        if (!this._screenshotPath) {
-            console.warn('[DesktopPreview] Screenshot path is null, returning null');
-            return null;
-        }
+        console.log('[DesktopPreview] Screenshot path:', this.TILE_SNAPSHOT);
 
         try {
             console.log('[DesktopPreview] Creating preview actor');
 
             // Create a container actor with necessary properties
-            const actor = new Clutter.Actor({
+            //const actor = new Clutter.Actor({
+            const actor = new St.Bin({
                 name: 'DesktopPreviewActor',
-                layout_manager: new Clutter.BinLayout(),
-                reactive: true,
-                x_expand: false,
-                y_expand: false,
+                x_expand: true,
+                y_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+                //layout_manager: new Clutter.BinLayout(),
+                // reactive: true,
+                // x_expand: true,
+                // y_expand: true,
             });
 
             // Set a reasonable initial size
-            actor.set_size(320, 180);
-            console.log('[DesktopPreview] Actor initial size set to 320x180');
+            //actor.set_size(1080, 720);
+            console.log('[DesktopPreview] Actor initial size set to 1080x720');
 
             // Add all properties and methods that WorkspaceLayout expects
             console.log('[DesktopPreview] Adding WorkspaceLayout-compatible interface');
@@ -137,16 +142,17 @@ class DesktopPreview {
                 return [0, 0];
             };
 
+            const workarea = Utils.getMonitorWorkarea();
             actor.boundingBox = {
                 x: 0,
                 y: 0,
-                width: 320,
-                height: 180,
+                width: workarea.width,
+                height: workarea.height,
             };
 
             actor.windowCenter = {
-                x: 160,
-                y: 90,
+                x: 0,
+                y: 0,
             };
 
             actor.visible = true;
@@ -156,28 +162,44 @@ class DesktopPreview {
             const container = new St.BoxLayout({
                 style_class: 'dragnTile-desktop-preview-container',
                 vertical: false,
-                x_expand: true,
-                y_expand: true,
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
+                x: 0,
+                y: 0,
+                width: workarea.width,
+                height: workarea.height,
+                content_gravity: Clutter.ContentGravity.RESIZE_ASPECT,
+                // x_align: Clutter.ActorAlign.CENTER,
+                // y_align: Clutter.ActorAlign.CENTER,
             });
 
             console.log('[DesktopPreview] Container created');
 
-            // Try to create an icon actor
             try {
-                console.log('[DesktopPreview] Creating St.Icon for preview');
-                const icon = new St.Icon({
-                    icon_size: 160,
+                console.log('[DesktopPreview] Creating St.Picture for preview', this.TILE_SNAPSHOT);
+                const pixbuf = GdkPixbuf.Pixbuf.new_from_file('/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                const w = pixbuf.get_width();
+                const h = pixbuf.get_height();
+
+                const imageContent = St.ImageContent.new_with_preferred_size(w, h);
+                const coglContext = Clutter.get_default_backend().get_cogl_context();
+                imageContent.set_data(
+                    coglContext,
+                    pixbuf.get_pixels(),
+                    pixbuf.get_has_alpha() ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
+                    w,
+                    h,
+                    pixbuf.get_rowstride()
+                );
+
+                console.log('[DesktopPreview] Picture loaded from screenshot');
+                const pictureActor = new Clutter.Actor({
+                    content: imageContent,
+                    // width: w,
+                    // height: h,
                     x_expand: true,
                     y_expand: true,
                 });
 
-                const gicon = Gio.icon_new_for_string(this._screenshotPath);
-                icon.set_gicon(gicon);
-                console.log('[DesktopPreview] Icon set with screenshot');
-
-                container.add_child(icon);
+                container.add_child(pictureActor);
             } catch (iconError) {
                 console.warn('[DesktopPreview] Icon creation failed:', iconError);
 
@@ -358,15 +380,15 @@ class DesktopPreview {
         console.log('[DesktopPreview] destroy() called');
         this.hide();
         this._screenshot = null;
-        if (this._screenshotPath) {
+        if (this.TILE_SNAPSHOT) {
             try {
-                console.log('[DesktopPreview] Deleting screenshot file:', this._screenshotPath);
-                Gio.File.new_for_path(this._screenshotPath).delete(null);
+                console.log('[DesktopPreview] Deleting screenshot file:', this.TILE_SNAPSHOT);
+                Gio.File.new_for_path(this.TILE_SNAPSHOT).delete(null);
                 console.log('[DesktopPreview] Screenshot file deleted');
             } catch (e) {
                 console.warn('[DesktopPreview] Error deleting screenshot file:', e);
             }
-            this._screenshotPath = null;
+            this.TILE_SNAPSHOT = null;
         }
         console.log('[DesktopPreview] destroy() completed');
     }
@@ -391,8 +413,8 @@ class TileLayout {
         this._windows.push(metaWindow);
     }
 
-    getTileWorkarea(focusWindow) {
-        let workarea = Utils.getMonitorWorkarea(focusWindow);
+    getTileWorkarea() {
+        let workarea = Utils.getMonitorWorkarea();
         let edgeGap = this.around ? this._gap : 0;
         return new Mtk.Rectangle({
                     x: workarea.x + edgeGap,
@@ -415,7 +437,7 @@ class TileLayout {
         let other = this._windows.find(win => win !== focus);
         if (focus === undefined || other === undefined) return;
 
-        let workarea = this.getTileWorkarea(focus);
+        let workarea = this.getTileWorkarea();
         let focusRect = focus.get_frame_rect();
         let otherRect = other.get_frame_rect();
         const gap = this._gap;
@@ -513,10 +535,9 @@ class Utils {
         }
     }
 
-    static getMonitorWorkarea(metaWindow) {
-        const monitor = metaWindow.get_monitor();
-        const workspace = metaWindow.get_workspace();
-        return workspace.get_work_area_for_monitor(monitor);
+    static getMonitorWorkarea() {
+        const monitorIndex = global.display.get_current_monitor();
+        return Main.layoutManager.getWorkAreaForMonitor(monitorIndex);
     }
 
     static getMetaWindow(id) {
@@ -700,7 +721,7 @@ export default class DragnTileExtension extends Extension {
     }
 
     checkQuitTile(triggerWindow) {
-        const workarea = this._layoutManager.getTileWorkarea(triggerWindow);
+        const workarea = this._layoutManager.getTileWorkarea();
         const wf = triggerWindow.get_frame_rect();
         // it doesn't quit tiling
         if (wf.x === workarea.x || wf.y === workarea.y) return;
