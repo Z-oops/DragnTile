@@ -160,7 +160,6 @@ class DesktopPreview {
 
             // Create a container for styling
             const container = new St.BoxLayout({
-                style_class: 'dragnTile-desktop-preview-container',
                 vertical: false,
                 x: 0,
                 y: 0,
