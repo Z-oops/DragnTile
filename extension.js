@@ -29,17 +29,103 @@ import Cogl from 'gi://Cogl';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { ControlsState } from 'resource:///org/gnome/shell/ui/overviewControls.js';
+import { OverviewAdjustment } from 'resource:///org/gnome/shell/ui/overviewControls.js';
 import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
+import { Workspace } from 'resource:///org/gnome/shell/ui/workspace.js';
 import * as Screenshot from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
 
-class DesktopPreview {
+class ImagePreview {
+    constructor(metaWindow, imagePath) {
+        const idx = global.workspace_manager.get_active_workspace_index();
+        const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
+        console.log('-------->construct imageview', metaWindow !== null, workspace !== null, workspace._overviewAdjustment);
+        this.preview = new WindowPreview(metaWindow, workspace, workspace._overviewAdjustment);
+        // TODO: remove closeButton
+        this.preview._closeButton = undefined;
+        this.metaWindow = metaWindow;
+
+        const pixbuf = GdkPixbuf.Pixbuf.new_from_file('/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+        const w = pixbuf.get_width();
+        const h = pixbuf.get_height();
+
+        const imageContent = St.ImageContent.new_with_preferred_size(w, h);
+        const coglContext = Clutter.get_default_backend().get_cogl_context();
+        imageContent.set_data(
+            coglContext,
+            pixbuf.get_pixels(),
+            pixbuf.get_has_alpha() ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
+            w,
+            h,
+            pixbuf.get_rowstride()
+        );
+
+        const workArea = Utils.getMonitorWorkarea();
+        this.replaceActor = new Clutter.Actor({
+            content: imageContent,
+            width: workArea.width,
+            height: workArea.height,
+            x_expand: true,
+            y_expand: true,
+        });
+
+        this.previewShowId = this.preview.connect('show', () => {
+            this.preview.add_child(this.replaceActor);
+            this.replaceActor.show();
+            console.log("-----> imgPreviewShow");
+        });
+
+        // this._contents.destroy_all_children();
+
+        // const texture = St.TextureCache.get_default().load_uri_async(
+        //     `file://${imagePath}`, -1, -1
+        // );
+
+        // this._contents.add_child(new St.Bin({
+        //     child: texture,
+        //     style: 'background-color: rgba(255,255,255,0.1); border-radius: 10px;',
+        //     x_expand: true,
+        //     y_expand: true,
+        // }));
+
+        // this._closeButton.hide();
+        // this._icon.hide();
+    }
+
+    show () {
+        const idx = global.workspace_manager.get_active_workspace_index();
+        const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
+        console.log('------>show  imageview', workspace !== null, typeof workspace);
+        const layoutManager = workspace._container.layout_manager;
+
+        if (layoutManager && layoutManager.addWindow) {
+            // hook the size which used by layoutmanager, so that the preview shows
+            // in the overview according to workarea size instead of metawindow size
+            const workArea = Utils.getMonitorWorkarea();
+            Object.defineProperty(this.preview, 'boundingBox', {
+                get: function() {
+                    return {
+                        x: workArea.x,
+                        y: workArea.y,
+                        width: workArea.width,
+                        height: workArea.height
+                    };
+                },
+                configurable: true, // must be true for restoring
+                enumerable: true
+            });
+            layoutManager.addWindow(this.preview, this.metaWindow);
+        }
+    }
+}
+
+class TilingPreview {
     constructor() {
         this._previewBox = null;
-        this._textureCache = St.TextureCache.get_default();
+        //this._textureCache = St.TextureCache.get_default();
         this._screenshot = new Shell.Screenshot();
         this._showId = null;
         this._fakeMetaWindow = null;
@@ -115,10 +201,6 @@ class DesktopPreview {
                 y_expand: true,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
-                //layout_manager: new Clutter.BinLayout(),
-                // reactive: true,
-                // x_expand: true,
-                // y_expand: true,
             });
 
             // Set a reasonable initial size
@@ -603,14 +685,19 @@ export default class DragnTileExtension extends Extension {
 
         // Initialize desktop preview
         console.log('[DragnTileExtension] Initializing DesktopPreview');
-        this._desktopPreview = new DesktopPreview();
+        //this._desktopPreview = new TilingPreview();
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
         this.overviewStateAdjId = stateAdjustment.connect('notify::value', (adj) => {
             if (adj.value === ControlsState.WINDOW_PICKER) {
-                this._desktopPreview.show();
+                if (this._targetId) {
+                    console.log('------------->[DragnTileExtension] Initializing ImagePreview');
+                    const imgPreview = new ImagePreview(Utils.getMetaWindow(this._targetId), '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                    imgPreview.show();
+                }
+                //this._desktopPreview.show();
             } else {
-                this._desktopPreview.hide();
+                //this._desktopPreview.hide();
             }
         });
     }
@@ -632,18 +719,6 @@ export default class DragnTileExtension extends Extension {
             console.log('[DragnTileExtension] Cleaning up desktop preview');
             this._desktopPreview.destroy();
             this._desktopPreview = null;
-        }
-
-        // Disconnect overview events
-        if (this._overviewShownId) {
-            console.log('[DragnTileExtension] Disconnecting overview shown event, id:', this._overviewShownId);
-            Main.overview.disconnect(this._overviewShownId);
-            this._overviewShownId = null;
-        }
-        if (this._overviewHiddenId) {
-            console.log('[DragnTileExtension] Disconnecting overview hidden event, id:', this._overviewHiddenId);
-            Main.overview.disconnect(this._overviewHiddenId);
-            this._overviewHiddenId = null;
         }
         console.log('[DragnTileExtension] disable() completed');
     }
