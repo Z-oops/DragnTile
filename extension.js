@@ -44,8 +44,6 @@ class ImagePreview {
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
         console.log('-------->construct imageview', metaWindow !== null, workspace !== null, workspace._overviewAdjustment);
         this.preview = new WindowPreview(metaWindow, workspace, workspace._overviewAdjustment);
-        // TODO: remove closeButton
-        this.preview._closeButton = undefined;
         this.metaWindow = metaWindow;
 
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file('/home/fuzzylogic/.cache/DragnTile.snapshot.png');
@@ -74,8 +72,44 @@ class ImagePreview {
 
         this.previewShowId = this.preview.connect('show', () => {
             this.preview.add_child(this.replaceActor);
+            this.preview.set_child_below_sibling(this.replaceActor, this.preview._icon);
             this.replaceActor.show();
             console.log("-----> imgPreviewShow");
+        });
+
+        // handle focus in/out
+        this.previewShowChromeId = this.preview._title.connect('show', () => {
+            // porting from WindowPreview.js:showOverlay()
+            // do the same animation with replaceActor's parent
+            const WINDOW_SCALE_TIME = 200;
+            const WINDOW_ACTIVE_SIZE_INC = 5; // in each direction
+            const [width, height] = this.preview.window_container.get_size();
+            const {scaleFactor} = St.ThemeContext.get_for_stage(global.stage);
+            const activeExtraSize = WINDOW_ACTIVE_SIZE_INC * 2 * scaleFactor;
+            const origSize = Math.max(width, height);
+            const scale = (origSize + activeExtraSize) / origSize;
+
+            Utils.log('preview', this.preview.window_container.get_x(), this.preview.window_container.get_y(), width, height,
+                'replace', this.replaceActor.get_x(), this.replaceActor.get_y(), this.replaceActor.get_size());
+            this.replaceActor.set_pivot_point(0.5, 0.5);
+            this.replaceActor.ease({
+                scale_x: scale,
+                scale_y: scale,
+                duration: WINDOW_SCALE_TIME,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+            console.log("-----> imgPreviewShowChrome");
+        });
+        this.previewShowChromeId = this.preview._title.connect('hide', () => {
+            // porting from WindowPreview.js:hideOverlay()
+            const WINDOW_SCALE_TIME = 200;
+            this.replaceActor.ease({
+                scale_x: 1,
+                scale_y: 1,
+                duration: WINDOW_SCALE_TIME,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+            console.log("-----> imgPreviewHideChrome");
         });
 
         // this._contents.destroy_all_children();
