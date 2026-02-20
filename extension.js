@@ -30,22 +30,18 @@ import Cogl from 'gi://Cogl';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { ControlsState } from 'resource:///org/gnome/shell/ui/overviewControls.js';
-import { OverviewAdjustment } from 'resource:///org/gnome/shell/ui/overviewControls.js';
 import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
-import { Workspace } from 'resource:///org/gnome/shell/ui/workspace.js';
-import * as Screenshot from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
 
 class TilingPreview {
-    constructor(metaWindow, imagePath) {
+    constructor(metaWindows, imagePath) {
         const idx = global.workspace_manager.get_active_workspace_index();
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
-        console.log('-------->construct imageview', metaWindow !== null, workspace !== null, workspace._overviewAdjustment);
-        this.preview = new WindowPreview(metaWindow, workspace, workspace._overviewAdjustment);
-        this.metaWindow = metaWindow;
+        this.preview = new WindowPreview(metaWindows[0], workspace, workspace._overviewAdjustment);
+        this.metaWindows = metaWindows;
 
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file('/home/fuzzylogic/.cache/DragnTile.snapshot.png');
         const w = pixbuf.get_width();
@@ -65,6 +61,7 @@ class TilingPreview {
         const workArea = Utils.getMonitorWorkarea();
         this.replaceActor = new Clutter.Actor({
             content: imageContent,
+            reactive: true,              // to receive click event
             width: workArea.width,
             height: workArea.height,
             x_expand: true,
@@ -112,12 +109,24 @@ class TilingPreview {
             });
             console.log("-----> imgPreviewHideChrome");
         });
+
+        // handle click
+        const clickGesture = new Clutter.ClickGesture();
+        clickGesture.connect('recognize', () => {
+            // TODO: move to specified workspace
+            this.metaWindows.forEach(window => Main.activateWindow(window, null, 0 /* ws number */));
+        });
+        this.replaceActor.add_action(clickGesture);
+
+        // modify the function of the close button
+        this.preview._deleteAll = function() {
+            // quit tiling
+        }
     }
 
     show () {
         const idx = global.workspace_manager.get_active_workspace_index();
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
-        console.log('------>show  imageview', workspace !== null, typeof workspace);
         const layoutManager = workspace._container.layout_manager;
 
         if (layoutManager && layoutManager.addWindow) {
@@ -136,12 +145,12 @@ class TilingPreview {
                 configurable: true, // must be true for restoring
                 enumerable: true
             });
-            layoutManager.addWindow(this.preview, this.metaWindow);
+            layoutManager.addWindow(this.preview, this.metaWindows[0]);
         }
     }
 }
 
-export const TilingLayout = GObject.registerClass({
+const TilingLayout = GObject.registerClass({
     GTypeName: 'TilingLayout',
     Signals: {
         'dragntile-relayout': {}
@@ -311,10 +320,10 @@ class Utils {
 
     static async captureWorkArea() {
         // wait for the window animation to complete and get the correct workarea size
-        await Utils.sleep(2000);
+        await Utils.sleep(1000);
         // TODO: it's better to wait for animation done other than sleep a fixed time
 
-        if (this.inCapture) 
+        if (this.inCapture)
             return Promise.reject("Already in capturing");
         this.inCapture = true;
 
@@ -362,7 +371,6 @@ class Utils {
                 // );
             });
         } catch (err) {
-            console.error('captureWorkArea failed', err);
             return Promise.reject("captureWorkArea failed");
         }
     }
@@ -419,7 +427,7 @@ export default class DragnTileExtension extends Extension {
         this._layoutManager.setGap(this._gap);
         this._layoutManager.setAround(this.around);
         this.relayoutId = this._layoutManager.connect('dragntile-relayout', () => {
-            Utils.captureWorkArea();
+            Utils.captureWorkArea().catch(err => Utils.log('captureWorkArea failed.'));
         });
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
@@ -427,8 +435,11 @@ export default class DragnTileExtension extends Extension {
             if (adj.value === ControlsState.WINDOW_PICKER) {
                 if (this._tile !== 'none') {
                     console.log('------------->[DragnTileExtension] Initializing ImagePreview');
-                    const imgPreview = new TilingPreview(Utils.getMetaWindow(this._targetId), '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
-                    imgPreview.show();
+                    // TODO: check if there is a leak
+                    this.tilingPreview = new TilingPreview(
+                                           [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
+                                           '/home/fuzzyl ogic/.cache/DragnTile.snapshot.png');
+                    this.tilingPreview.show();
                 }
             } else {
             }
