@@ -122,6 +122,9 @@ class TilingPreview {
         this.preview._deleteAll = function() {
             // quit tiling
         }
+
+        // diable dnd of a TilingPreview
+        this.preview._draggable._gestureRecognized = function() { /* do nothing */ }
     }
 
     show () {
@@ -438,7 +441,7 @@ export default class DragnTileExtension extends Extension {
                     // TODO: check if there is a leak
                     this.tilingPreview = new TilingPreview(
                                            [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                           '/home/fuzzyl ogic/.cache/DragnTile.snapshot.png');
+                                           '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
                     this.tilingPreview.show();
                 }
             } else {
