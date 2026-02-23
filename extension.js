@@ -435,9 +435,14 @@ export default class DragnTileExtension extends Extension {
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
         this.overviewStateAdjId = stateAdjustment.connect('notify::value', (adj) => {
-            if (adj.value === ControlsState.WINDOW_PICKER) {
-                if (this._tile !== 'none') {
-                    console.log('------------->[DragnTileExtension] Initializing ImagePreview');
+            const shouldAllocPreview = this.previousAdjValue === ControlsState.HIDDEN
+                                         || this.previousAdjValue === ControlsState.APP_GRID;
+            // hidden to window_pick 0...1.0
+            // hidden to app_grid 1.0...2.0
+            // app_grid to hidden 1.0...0
+            // app_grid to window_picker 2.0...1.0
+            if (adj.value > ControlsState.HIDDEN && adj.value < ControlsState.WINDOW_PICKER) {
+                if (shouldAllocPreview && this._tile !== 'none') {
                     // TODO: check if there is a leak
                     this.tilingPreview = new TilingPreview(
                                            [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
@@ -446,6 +451,7 @@ export default class DragnTileExtension extends Extension {
                 }
             } else {
             }
+            this.previousAdjValue = adj.value;
         });
     }
 
