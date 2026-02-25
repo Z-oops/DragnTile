@@ -132,24 +132,22 @@ class TilingPreview {
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
         const layoutManager = workspace._container.layout_manager;
 
-        if (layoutManager && layoutManager.addWindow) {
-            // hook the size which used by layoutmanager, so that the preview shows
-            // in the overview according to workarea size instead of metawindow size
-            const workArea = Utils.getMonitorWorkarea();
-            Object.defineProperty(this.preview, 'boundingBox', {
-                get: function() {
-                    return {
-                        x: workArea.x,
-                        y: workArea.y,
-                        width: workArea.width,
-                        height: workArea.height
-                    };
-                },
-                configurable: true, // must be true for restoring
-                enumerable: true
-            });
-            layoutManager.addWindow(this.preview, this.metaWindows[0]);
-        }
+        // hook the size which used by layoutmanager, so that the preview shows
+        // in the overview according to workarea size instead of metawindow size
+        const workArea = Utils.getMonitorWorkarea();
+        Object.defineProperty(this.preview, 'boundingBox', {
+            get: function() {
+                return {
+                    x: workArea.x,
+                    y: workArea.y,
+                    width: workArea.width,
+                    height: workArea.height
+                };
+            },
+            configurable: true, // must be true for restoring
+            enumerable: true
+        });
+        layoutManager.addWindow(this.preview, this.metaWindows[0]);
     }
 }
 
@@ -435,23 +433,53 @@ export default class DragnTileExtension extends Extension {
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
         this.overviewStateAdjId = stateAdjustment.connect('notify::value', (adj) => {
-            const shouldAllocPreview = this.previousAdjValue === ControlsState.HIDDEN
-                                         || this.previousAdjValue === ControlsState.APP_GRID;
             // hidden to window_pick 0...1.0
             // hidden to app_grid 1.0...2.0
             // app_grid to hidden 1.0...0
             // app_grid to window_picker 2.0...1.0
-            if (adj.value > ControlsState.HIDDEN && adj.value < ControlsState.WINDOW_PICKER) {
-                if (shouldAllocPreview && this._tile !== 'none') {
+            const shouldAllocPreview = adj.value > ControlsState.HIDDEN 
+                                        && adj.value < ControlsState.WINDOW_PICKER
+                                        && (this.previousAdjValue === ControlsState.HIDDEN
+                                            || this.previousAdjValue === ControlsState.APP_GRID);
+            const shouldDestroyPreview = adj.value === ControlsState.HIDDEN;
+            if (shouldAllocPreview) {
+                if (this._tile !== 'none'
+                    && Utils.getMetaWindow(this._targetId).get_workspace() === global.workspace_manager.get_active_workspace()) {
                     // TODO: check if there is a leak
-                    this.tilingPreview = new TilingPreview(
-                                           [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                           '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                    if (this.tilingPreview === undefined) {
+                        this.tilingPreview = new TilingPreview(
+                                [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
+                                '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+
+                    }
                     this.tilingPreview.show();
                 }
+            } else if (shouldDestroyPreview) {
+                this.tilingPreview = undefined;
             } else {
             }
             this.previousAdjValue = adj.value;
+        });
+
+        this.workspaceChangeId = global.workspace_manager.connect('active-workspace-changed', () => {
+            const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
+            if (stateAdjustment.value === ControlsState.WINDOW_PICKER) {
+                if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId).get_workspace() 
+                                                === global.workspace_manager.get_active_workspace())) {
+                    // TODO: check if there is a leak
+                    if (this.tilingPreview === undefined) {
+                        this.tilingPreview = new TilingPreview(
+                                [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
+                                '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                    }
+                    this.tilingPreview.show();
+                }
+
+                console.log('++++DragnTileExtension.active-workspace-changed',
+                        this._tile !== 'none',
+                        this.tilingPreview === undefined,
+                        Utils.getMetaWindow(this._targetId)?.get_workspace() === global.workspace_manager.get_active_workspace());
+            }
         });
     }
 
