@@ -35,6 +35,8 @@ import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
+const PREVIEW_IMG = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`]);
+let ICON_IMG = "";  // initialized in DragnTileExtension.enable
 
 class TilingPreview {
     constructor(metaWindows, imagePath) {
@@ -43,7 +45,7 @@ class TilingPreview {
         this.preview = new WindowPreview(metaWindows[0], workspace, workspace._overviewAdjustment);
         this.metaWindows = metaWindows;
 
-        const pixbuf = GdkPixbuf.Pixbuf.new_from_file('/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+        const pixbuf = GdkPixbuf.Pixbuf.new_from_file(imagePath);
         const w = pixbuf.get_width();
         const h = pixbuf.get_height();
 
@@ -70,11 +72,48 @@ class TilingPreview {
 
         this.previewShowId = this.preview.connect('show', () => {
             this.preview.add_child(this.replaceActor);
-            this.preview.set_child_below_sibling(this.replaceActor, this.preview._icon);
+            this.preview.set_child_below_sibling(this.replaceActor, this.preview._title);
             this.replaceActor.show();
             console.log("-----> imgPreviewShow");
         });
 
+        // custom icon
+        // porting from WindowPrevew
+        this.preview.remove_child(this.preview._icon);
+        const icon = new St.Icon({
+            gicon: new Gio.FileIcon({file: Gio.File.new_for_path(ICON_IMG)}),
+            icon_size: 64
+        });
+        icon.add_style_class_name('window-icon');
+        icon.add_style_class_name('icon-dropshadow');
+        icon.set({
+            reactive: true,
+            pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
+        });
+        const windowContainer = this.preview.get_child_at_index(0);
+        icon.add_constraint(new Clutter.BindConstraint({
+            source: windowContainer,
+            coordinate: Clutter.BindCoordinate.POSITION,
+        }));
+        icon.add_constraint(new Clutter.AlignConstraint({
+            source: windowContainer,
+            align_axis: Clutter.AlignAxis.X_AXIS,
+            factor: 0.5,
+        }));
+        icon.add_constraint(new Clutter.AlignConstraint({
+            source: windowContainer,
+            align_axis: Clutter.AlignAxis.Y_AXIS,
+            pivot_point: new Graphene.Point({x: -1, y: 0.7}),
+            factor: 1,
+        }));
+        this.preview._icon = icon;
+        this.preview.add_child(this.preview._icon);
+        this.preview.set_child_below_sibling(this.preview._icon, this.preview._closeButton);
+
+        // custom title
+        this.preview._title.text = "Tiling preview";
+
+        // interactive
         // handle focus in/out
         this.previewShowChromeId = this.preview._title.connect('show', () => {
             // porting from WindowPreview.js:showOverlay()
@@ -331,8 +370,8 @@ class Utils {
         try {
             const workArea = Utils.getMonitorWorkarea();
 
-            const savePath = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`]);
-            const file = Gio.File.new_for_path(savePath);
+            //const savePath = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`]);
+            const file = Gio.File.new_for_path(PREVIEW_IMG);
             const outputStream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
 
             const screenshot = new Shell.Screenshot();
@@ -379,6 +418,8 @@ class Utils {
 
 export default class DragnTileExtension extends Extension {
     enable() {
+        ICON_IMG = this.dir.get_child('icon.png').get_path();
+
         this._dragMonitor = {
             dragDrop: this._onDragDrop.bind(this),
             dragMotion: this._onDragMotion.bind(this),
@@ -437,7 +478,7 @@ export default class DragnTileExtension extends Extension {
             // hidden to app_grid 1.0...2.0
             // app_grid to hidden 1.0...0
             // app_grid to window_picker 2.0...1.0
-            const shouldAllocPreview = adj.value > ControlsState.HIDDEN 
+            const shouldAllocPreview = adj.value > ControlsState.HIDDEN
                                         && adj.value < ControlsState.WINDOW_PICKER
                                         && (this.previousAdjValue === ControlsState.HIDDEN
                                             || this.previousAdjValue === ControlsState.APP_GRID);
@@ -449,7 +490,7 @@ export default class DragnTileExtension extends Extension {
                     if (this.tilingPreview === undefined) {
                         this.tilingPreview = new TilingPreview(
                                 [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                                PREVIEW_IMG);
 
                     }
                     this.tilingPreview.show();
@@ -464,13 +505,13 @@ export default class DragnTileExtension extends Extension {
         this.workspaceChangeId = global.workspace_manager.connect('active-workspace-changed', () => {
             const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
             if (stateAdjustment.value === ControlsState.WINDOW_PICKER) {
-                if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId).get_workspace() 
+                if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId).get_workspace()
                                                 === global.workspace_manager.get_active_workspace())) {
                     // TODO: check if there is a leak
                     if (this.tilingPreview === undefined) {
                         this.tilingPreview = new TilingPreview(
                                 [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                '/home/fuzzylogic/.cache/DragnTile.snapshot.png');
+                                PREVIEW_IMG);
                     }
                     this.tilingPreview.show();
                 }
