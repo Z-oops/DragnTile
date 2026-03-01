@@ -37,6 +37,12 @@ export default class DragnTilePreferences extends ExtensionPreferences {
         });
         group.add(aroundRow);
 
+        const useTilingPreview = new Adw.SwitchRow({
+            title: _('Tiling preview'),
+            subtitle: _('Show tiling preview in overview (experimental)'),
+        });
+        group.add(useTilingPreview);
+
         const row = new Adw.SwitchRow({
             title: _('debug'),
             subtitle: _('Enable debug log'),
@@ -48,6 +54,8 @@ export default class DragnTilePreferences extends ExtensionPreferences {
         window._settings.bind('window-gap', spin, 'value',
             Gio.SettingsBindFlags.DEFAULT);
         window._settings.bind('around', aroundRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        window._settings.bind('tiling-preview', useTilingPreview, 'active',
             Gio.SettingsBindFlags.DEFAULT);
         window._settings.bind('debug', row, 'active',
             Gio.SettingsBindFlags.DEFAULT);

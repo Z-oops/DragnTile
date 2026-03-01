@@ -74,7 +74,6 @@ class TilingPreview {
             this.preview.add_child(this.replaceActor);
             this.preview.set_child_below_sibling(this.replaceActor, this.preview._title);
             this.replaceActor.show();
-            console.log("-----> imgPreviewShow");
         });
 
         // custom icon
@@ -135,9 +134,8 @@ class TilingPreview {
                 duration: WINDOW_SCALE_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
-            console.log("-----> imgPreviewShowChrome");
         });
-        this.previewShowChromeId = this.preview._title.connect('hide', () => {
+        this.previewHideChromeId = this.preview._title.connect('hide', () => {
             // porting from WindowPreview.js:hideOverlay()
             const WINDOW_SCALE_TIME = 200;
             this.replaceActor.ease({
@@ -146,7 +144,6 @@ class TilingPreview {
                 duration: WINDOW_SCALE_TIME,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
-            console.log("-----> imgPreviewHideChrome");
         });
 
         // handle click
@@ -188,6 +185,12 @@ class TilingPreview {
         });
         layoutManager.addWindow(this.preview, this.metaWindows[0]);
     }
+
+    clear() {
+        Utils.tryDisconnect(this.previewShowId);
+        Utils.tryDisconnect(this.previewShowChromeId);
+        Utils.tryDisconnect(this.previewHideChromeId);
+    }
 }
 
 const TilingLayout = GObject.registerClass({
@@ -227,7 +230,6 @@ const TilingLayout = GObject.registerClass({
     }
 
     relayout() {
-        //console.log(new Error().stack);
         if (this._nextTile === "none") return;
 
         // it only supports two windows now
@@ -414,11 +416,16 @@ class Utils {
             return Promise.reject("captureWorkArea failed");
         }
     }
+
+    static tryDisconnect(id) {
+        if (id) GLib.Source.remove(id);
+    }
+
 }
 
 export default class DragnTileExtension extends Extension {
     enable() {
-        ICON_IMG = this.dir.get_child('icon.png').get_path();
+        ICON_IMG = this.dir.get_child('assets/icon.png').get_path();
 
         this._dragMonitor = {
             dragDrop: this._onDragDrop.bind(this),
@@ -466,6 +473,12 @@ export default class DragnTileExtension extends Extension {
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
 
+        this.useTilingPreview = this._settings.get_value('tiling-preview').get_boolean();
+        this._settings.connect('changed::tiling-preview', (settings, key) => {
+            this.useTilingPreview = settings.get_value(key).get_boolean();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
         this._layoutManager.setGap(this._gap);
         this._layoutManager.setAround(this.around);
         this.relayoutId = this._layoutManager.connect('dragntile-relayout', () => {
@@ -474,6 +487,8 @@ export default class DragnTileExtension extends Extension {
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
         this.overviewStateAdjId = stateAdjustment.connect('notify::value', (adj) => {
+            if (!this.useTilingPreview) return;
+
             // hidden to window_pick 0...1.0
             // hidden to app_grid 1.0...2.0
             // app_grid to hidden 1.0...0
@@ -496,6 +511,7 @@ export default class DragnTileExtension extends Extension {
                     this.tilingPreview.show();
                 }
             } else if (shouldDestroyPreview) {
+                this.tilingPreview?.clear();
                 this.tilingPreview = undefined;
             } else {
             }
@@ -503,6 +519,8 @@ export default class DragnTileExtension extends Extension {
         });
 
         this.workspaceChangeId = global.workspace_manager.connect('active-workspace-changed', () => {
+            if (!this.useTilingPreview) return;
+
             const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
             if (stateAdjustment.value === ControlsState.WINDOW_PICKER) {
                 if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId).get_workspace()
@@ -515,17 +533,11 @@ export default class DragnTileExtension extends Extension {
                     }
                     this.tilingPreview.show();
                 }
-
-                console.log('++++DragnTileExtension.active-workspace-changed',
-                        this._tile !== 'none',
-                        this.tilingPreview === undefined,
-                        Utils.getMetaWindow(this._targetId)?.get_workspace() === global.workspace_manager.get_active_workspace());
             }
         });
     }
 
     disable() {
-        console.log('[DragnTileExtension] disable() called');
         DND.removeDragMonitor(this._dragMonitor);
         this._dragMonitor = undefined;
         this._settings = null;
@@ -533,20 +545,11 @@ export default class DragnTileExtension extends Extension {
 
         this._tileTip.destroy();
         this._tileTip = null;
-        this.tryDisconnect(this.timeoutId);
-        this.tryDisconnect(this.overviewStateAdjId);
-        this.tryDisconnect(this.relayoutId);
-
-        // Cleanup desktop preview resources
-        if (this._desktopPreview) {
-            console.log('[DragnTileExtension] Cleaning up desktop preview');
-            this._desktopPreview.destroy();
-            this._desktopPreview = null;
-        }
-        console.log('[DragnTileExtension] disable() completed');
+        Utils.tryDisconnect(this.timeoutId);
+        Utils.tryDisconnect(this.overviewStateAdjId);
+        Utils.tryDisconnect(this.workspaceChangeId);
+        Utils.tryDisconnect(this.relayoutId);
     }
-
-
 
     _onDragDrop(event) {
         // clear extension states when drag and drop
@@ -576,17 +579,13 @@ export default class DragnTileExtension extends Extension {
         Utils.getMetaWindow(this._targetId).unminimize();
 
         // wait for complete of the window animation
-        this.tryDisconnect(this.timeoutId);
+        Utils.tryDisconnect(this.timeoutId);
         this.timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this.registerWindowEvent();
             this.timeoutId = undefined;
             return GLib.SOURCE_REMOVE;
         });
         return DND.DragDropResult.CONTINUE;
-    }
-
-    tryDisconnect(timerId) {
-        if (timerId) GLib.Source.remove(timerId);
     }
 
     registerWindowEvent() {

@@ -7,6 +7,9 @@
     <key name="around" type="b">
       <default>false</default>
     </key>
+    <key name="tiling-preview" type="b">
+      <default>true</default>
+    </key>
     <key name="debug" type="b">
       <default>false</default>
     </key>
