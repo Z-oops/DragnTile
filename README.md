@@ -9,10 +9,12 @@ Or manually install with the following steps:
 ```shell
 git clone https://github.com/Z-oops/DragnTile.git
 cd DragnTile
-zip DragnTile@luozengcn.gmail.com.zip -r * -x assets
+./mkpkg.sh
 gnome-extensions install DragnTile@luozengcn.gmail.com.zip
 ```
 # History
+20260302: Support tiling preivew in the gnome overview.
+
 20250917: Support drag to change tiling ratio.
 
 20250213: Support split screen vertically.
