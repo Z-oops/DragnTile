@@ -190,6 +190,12 @@ class TilingPreview {
         Utils.tryDisconnect(this.previewShowId);
         Utils.tryDisconnect(this.previewShowChromeId);
         Utils.tryDisconnect(this.previewHideChromeId);
+        this.replaceActor.destroy();
+        this.replaceActor = null;
+        this.preview._icon.destroy();
+        this.preview._icon = null;
+        this.preview.destroy();
+        this.preview = null;
     }
 }
 
@@ -333,7 +339,7 @@ class Utils {
 
     static unmaximize(metaWindow) {
         if (metaWindow.set_unmaximize_flags === undefined) {
-            // <= gnome48
+            // <= gnome48, it's for compatibility with diffrent gnome versions.
             metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
             metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
         } else {
@@ -389,7 +395,7 @@ class Utils {
                         try {
                             outputStream.close(null);
                             this.inCapture = false;
-                            resolve(savePath);
+                            resolve(PREVIEW_IMG);
                         } catch (e) {
                             this.inCapture = false;
                             reject(e);
@@ -539,12 +545,15 @@ export default class DragnTileExtension extends Extension {
 
     disable() {
         DND.removeDragMonitor(this._dragMonitor);
+        this.unregisterWindowEvent();
         this._dragMonitor = undefined;
         this._settings = null;
         this._layoutManager = null;
 
         this._tileTip.destroy();
         this._tileTip = null;
+        this.tilingPreview?.clear();
+        this.tilingPreview = null;
         Utils.tryDisconnect(this.timeoutId);
         Utils.tryDisconnect(this.overviewStateAdjId);
         Utils.tryDisconnect(this.workspaceChangeId);
@@ -601,6 +610,18 @@ export default class DragnTileExtension extends Extension {
         this._sizechangeId.set(this._targetId, targetWindow.connect('size-changed', this.sizeChangedWindow.bind(this)));
     }
 
+    unregisterWindowEvent() {
+        this._positionChangeIds.forEach((value, key, map) => {
+            Utils.getMetaWindow(key)?.disconnect(value);
+        });
+        this._positionChangeIds.clear(true);
+
+        this._sizechangeId.forEach((value, key, map) => {
+            Utils.getMetaWindow(key)?.disconnect(value);
+        });
+        this._sizechangeId.clear();
+    }
+
     enterTile() {
         const dropWindow = Utils.getMetaWindow(this._dropId);
         const targetWindow = Utils.getMetaWindow(this._targetId);
@@ -623,17 +644,7 @@ export default class DragnTileExtension extends Extension {
         const wf = triggerWindow.get_frame_rect();
         // it doesn't quit tiling
         if (wf.x === workarea.x || wf.y === workarea.y) return;
-
-        this._positionChangeIds.forEach((value, key, map) => {
-            Utils.getMetaWindow(key)?.disconnect(value);
-        });
-        this._positionChangeIds.clear(true);
-
-        this._sizechangeId.forEach((value, key, map) => {
-            Utils.getMetaWindow(key)?.disconnect(value);
-        });
-        this._sizechangeId.clear();
-
+        this.unregisterWindowEvent();
         this._layoutManager.restoreWindowRect(this._dropId);
         this._layoutManager.restoreWindowRect(this._targetId);
         this._layoutManager.clear();
