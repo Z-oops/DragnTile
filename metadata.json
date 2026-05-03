@@ -3,7 +3,7 @@
   "description": "Tile windows from the gnome overview.",
   "uuid": "DragnTile@luozengcn.gmail.com",
   "shell-version": [
-    "45","46","47","48","49"
+    "45","46","47","48","49","50"
   ],
   "version-name": "26.03.01",
   "url": "https://github.com/Z-oops/DragnTile",
