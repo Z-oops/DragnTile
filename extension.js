@@ -482,7 +482,7 @@ export default class DragnTileExtension extends Extension {
                 if (this._tile !== 'none'
                     && Utils.getMetaWindow(this._targetId).get_workspace() === global.workspace_manager.get_active_workspace()) {
                     // TODO: check if there is a leak
-                    if (this.tilingPreview === undefined) {
+                    if (!this.tilingPreview) {
                         this.tilingPreview = new TilingPreview(
                                 [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
                                 PREVIEW_IMG);
@@ -678,6 +678,8 @@ export default class DragnTileExtension extends Extension {
         // it doesn't quit tiling
         if (wf.x === workarea.x || wf.y === workarea.y) return;
         this.unregisterWindowEvent();
+        this._layoutManager.disconnect(this.relayoutId);
+        this.relayoutId = null;
         this._layoutManager.restoreWindowRect(this._dropId);
         this._layoutManager.restoreWindowRect(this._targetId);
         this._layoutManager.clear();
