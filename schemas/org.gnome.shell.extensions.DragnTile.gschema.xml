@@ -5,7 +5,7 @@
       <default>2</default>
     </key>
     <key name="around" type="b">
-      <default>false</default>
+      <default>true</default>
     </key>
     <key name="tiling-preview" type="b">
       <default>true</default>
