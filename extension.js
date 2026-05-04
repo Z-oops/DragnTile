@@ -186,10 +186,13 @@ class TilingPreview {
         layoutManager.addWindow(this.preview, this.metaWindows[0]);
     }
 
-    clear() {
-        Utils.tryDisconnect(this.previewShowId);
-        Utils.tryDisconnect(this.previewShowChromeId);
-        Utils.tryDisconnect(this.previewHideChromeId);
+    destroy() {
+        this.preview.disconnect(this.previewShowId);
+        this.previewShowId = null;
+        this.preview._title.disconnect(this.previewShowChromeId);
+        this.previewShowChromeId = null;
+        this.preview._title.disconnect(this.previewHideChromeId);
+        this.previewHideChromeId = null;
         this.replaceActor.destroy();
         this.replaceActor = null;
         this.preview._icon.destroy();
@@ -338,12 +341,13 @@ class Utils {
     }
 
     static unmaximize(metaWindow) {
-        if (metaWindow.set_unmaximize_flags === undefined) {
+        if (metaWindow.set_unmaximize_flags) {
+            metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
+        } else if (metaWindow.unmaximize) {
+            // https://gjs.guide/extensions/development/targeting-older-gnome.html#feature-detection
             // <= gnome48, it's for compatibility with diffrent gnome versions.
             metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
             metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
-        } else {
-            metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
         }
     }
 
@@ -453,37 +457,7 @@ export default class DragnTileExtension extends Extension {
         this._positionChangeIds = new Map();
         this._layoutManager = new TilingLayout();
 
-        // Create a new GSettings object
-        this._settings = this.getSettings();
-
-        this._debug = this._settings.get_value('debug');
-        // Watch for changes to a specific setting
-        this._settings.connect('changed::debug', (settings, key) => {
-            this._debug = settings.get_value(key);
-            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
-        });
-
-        this._gap = this._settings.get_value('window-gap').get_int32();
-        this._settings.connect('changed::window-gap', (settings, key) => {
-            this._gap = settings.get_value(key).get_int32();
-            this._layoutManager.setGap(this._gap);
-            this._layoutManager.relayout();
-            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
-        });
-
-        this.around = this._settings.get_value('around').get_boolean();
-        this._settings.connect('changed::around', (settings, key) => {
-            this.around = settings.get_value(key).get_boolean();
-            this._layoutManager.setAround(this.around);
-            this._layoutManager.relayout();
-            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
-        });
-
-        this.useTilingPreview = this._settings.get_value('tiling-preview').get_boolean();
-        this._settings.connect('changed::tiling-preview', (settings, key) => {
-            this.useTilingPreview = settings.get_value(key).get_boolean();
-            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
-        });
+        this.registerSettings();
 
         this._layoutManager.setGap(this._gap);
         this._layoutManager.setAround(this.around);
@@ -517,8 +491,8 @@ export default class DragnTileExtension extends Extension {
                     this.tilingPreview.show();
                 }
             } else if (shouldDestroyPreview) {
-                this.tilingPreview?.clear();
-                this.tilingPreview = undefined;
+                this.tilingPreview?.destroy();
+                this.tilingPreview = null;
             } else {
             }
             this.previousAdjValue = adj.value;
@@ -546,18 +520,77 @@ export default class DragnTileExtension extends Extension {
     disable() {
         DND.removeDragMonitor(this._dragMonitor);
         this.unregisterWindowEvent();
+        this.unregisterSettings();
         this._dragMonitor = undefined;
         this._settings = null;
+
+        this._layoutManager.disconnect(this.relayoutId);
+        this.relayoutId = null;
         this._layoutManager = null;
 
         this._tileTip.destroy();
         this._tileTip = null;
-        this.tilingPreview?.clear();
+        this.tilingPreview?.destroy();
         this.tilingPreview = null;
-        Utils.tryDisconnect(this.timeoutId);
-        Utils.tryDisconnect(this.overviewStateAdjId);
-        Utils.tryDisconnect(this.workspaceChangeId);
-        Utils.tryDisconnect(this.relayoutId);
+
+        if (this.timeoutId) {
+            GLib.Source.remove(this.timeoutId);
+            this.timeoutId = null;
+        }
+
+        const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
+        stateAdjustment.disconnect(this.overviewStateAdjId)
+        this.overviewStateAdjId = null;
+
+        global.workspace_manager.disconnect(this.workspaceChangeId);
+        this.workspaceChangeId = null;
+    }
+
+    registerSettings() {
+        // Create a new GSettings object
+        this._settings = this.getSettings();
+
+        this._debug = this._settings.get_value('debug');
+        // Watch for changes to a specific setting
+        this._debugId = this._settings.connect('changed::debug', (settings, key) => {
+            this._debug = settings.get_value(key);
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
+        this._gap = this._settings.get_value('window-gap').get_int32();
+        this._gapId = this._settings.connect('changed::window-gap', (settings, key) => {
+            this._gap = settings.get_value(key).get_int32();
+            this._layoutManager.setGap(this._gap);
+            this._layoutManager.relayout();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
+        this.around = this._settings.get_value('around').get_boolean();
+        this._aroundId = this._settings.connect('changed::around', (settings, key) => {
+            this.around = settings.get_value(key).get_boolean();
+            this._layoutManager.setAround(this.around);
+            this._layoutManager.relayout();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+
+        this.useTilingPreview = this._settings.get_value('tiling-preview').get_boolean();
+        this._tilingPreviewId = this._settings.connect('changed::tiling-preview', (settings, key) => {
+            this.useTilingPreview = settings.get_value(key).get_boolean();
+            console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
+        });
+    }
+
+    unregisterSettings() {
+        this._settings.disconnect(this._debugId);
+        this._debugId = null;
+        this._settings.disconnect(this._gapId);
+        this._gapId = null;
+        this._settings.disconnect(this._aroundId);
+        this._aroundId = null;
+        this._settings.disconnect(this._tilingPreviewId);
+        this._tilingPreviewId = null;
+
+        this._settings = null;
     }
 
     _onDragDrop(event) {
