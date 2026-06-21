@@ -276,7 +276,7 @@ const TilingLayout = GObject.registerClass({
             }
         }
 
-        if (focusRect.width !== workarea.width) {
+        if (this._tile === 'SLTR' || this._tile === 'TLSR') {
             const otherX = focusRect.x > workarea.x ? workarea.x : focusRect.x + focusRect.width + gap;
             otherRect = new Mtk.Rectangle({
                 x: otherX, y: workarea.y, width: workarea.width - focusRect.width - gap, height: workarea.height});
