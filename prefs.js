@@ -3,6 +3,7 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import * as Config from 'resource:///org/gnome/Shell/Extensions/js/misc/config.js';
 
 export default class DragnTilePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -39,7 +40,7 @@ export default class DragnTilePreferences extends ExtensionPreferences {
 
         const useTilingPreview = new Adw.SwitchRow({
             title: _('Tiling preview'),
-            subtitle: _('Show tiling preview in overview (experimental)'),
+            subtitle: _('Show tiling preview in overview (require GNOME 49+)'),
         });
         group.add(useTilingPreview);
 
@@ -55,8 +56,16 @@ export default class DragnTilePreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         window._settings.bind('around', aroundRow, 'active',
             Gio.SettingsBindFlags.DEFAULT);
-        window._settings.bind('tiling-preview', useTilingPreview, 'active',
-            Gio.SettingsBindFlags.DEFAULT);
+        const gnomeVersion = parseInt(Config.PACKAGE_VERSION.split('.')[0]);
+        console.log(`GNOME version: ${gnomeVersion}`);
+        if (gnomeVersion >= 49) {
+            window._settings.bind('tiling-preview', useTilingPreview, 'active',
+                Gio.SettingsBindFlags.DEFAULT);
+        } else {
+            // tiling-preview is only supported on GNOME 49+
+            window._settings.set_boolean('tiling-preview', false);
+            useTilingPreview.set_sensitive(false);
+        }
         window._settings.bind('debug', row, 'active',
             Gio.SettingsBindFlags.DEFAULT);
     }
