@@ -39,11 +39,12 @@ const PREVIEW_IMG = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.
 let ICON_IMG = "";  // initialized in DragnTileExtension.enable
 
 class TilingPreview {
-    constructor(metaWindows, imagePath) {
+    constructor(metaWindows, imagePath, extension) {
         const idx = global.workspace_manager.get_active_workspace_index();
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
-        this.preview = new WindowPreview(metaWindows[0], workspace, workspace._overviewAdjustment);
+        this.windowPreview = new WindowPreview(metaWindows[0], workspace, workspace._overviewAdjustment);
         this.metaWindows = metaWindows;
+        this.extension = extension;
 
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file(imagePath);
         const w = pixbuf.get_width();
@@ -70,15 +71,15 @@ class TilingPreview {
             y_expand: true,
         });
 
-        this.previewShowId = this.preview.connect('show', () => {
-            this.preview.add_child(this.replaceActor);
-            this.preview.set_child_below_sibling(this.replaceActor, this.preview._title);
+        this.previewShowId = this.windowPreview.connect('show', () => {
+            this.windowPreview.add_child(this.replaceActor);
+            this.windowPreview.set_child_below_sibling(this.replaceActor, this.windowPreview._title);
             this.replaceActor.show();
         });
 
         // custom icon
         // porting from WindowPrevew
-        this.preview.remove_child(this.preview._icon);
+        this.windowPreview.remove_child(this.windowPreview._icon);
         const icon = new St.Icon({
             gicon: new Gio.FileIcon({file: Gio.File.new_for_path(ICON_IMG)}),
             icon_size: 64
@@ -89,7 +90,7 @@ class TilingPreview {
             reactive: true,
             pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
         });
-        const windowContainer = this.preview.get_child_at_index(0);
+        const windowContainer = this.windowPreview.get_child_at_index(0);
         icon.add_constraint(new Clutter.BindConstraint({
             source: windowContainer,
             coordinate: Clutter.BindCoordinate.POSITION,
@@ -105,27 +106,27 @@ class TilingPreview {
             pivot_point: new Graphene.Point({x: -1, y: 0.7}),
             factor: 1,
         }));
-        this.preview._icon = icon;
-        this.preview.add_child(this.preview._icon);
-        this.preview.set_child_below_sibling(this.preview._icon, this.preview._closeButton);
+        this.windowPreview._icon = icon;
+        this.windowPreview.add_child(this.windowPreview._icon);
+        this.windowPreview.set_child_below_sibling(this.windowPreview._icon, this.windowPreview._closeButton);
 
         // custom title
-        this.preview._title.text = "Tiling preview";
+        this.windowPreview._title.text = "Tiling preview";
 
         // interactive
         // handle focus in/out
-        this.previewShowChromeId = this.preview._title.connect('show', () => {
+        this.previewShowChromeId = this.windowPreview._title.connect('show', () => {
             // porting from WindowPreview.js:showOverlay()
             // do the same animation with replaceActor's parent
             const WINDOW_SCALE_TIME = 200;
             const WINDOW_ACTIVE_SIZE_INC = 5; // in each direction
-            const [width, height] = this.preview.window_container.get_size();
+            const [width, height] = this.windowPreview.window_container.get_size();
             const {scaleFactor} = St.ThemeContext.get_for_stage(global.stage);
             const activeExtraSize = WINDOW_ACTIVE_SIZE_INC * 2 * scaleFactor;
             const origSize = Math.max(width, height);
             const scale = (origSize + activeExtraSize) / origSize;
 
-            Utils.log('preview', this.preview.window_container.get_x(), this.preview.window_container.get_y(), width, height,
+            Utils.log('preview', this.windowPreview.window_container.get_x(), this.windowPreview.window_container.get_y(), width, height,
                 'replace', this.replaceActor.get_x(), this.replaceActor.get_y(), this.replaceActor.get_size());
             this.replaceActor.set_pivot_point(0.5, 0.5);
             this.replaceActor.ease({
@@ -135,7 +136,7 @@ class TilingPreview {
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
         });
-        this.previewHideChromeId = this.preview._title.connect('hide', () => {
+        this.previewHideChromeId = this.windowPreview._title.connect('hide', () => {
             // porting from WindowPreview.js:hideOverlay()
             const WINDOW_SCALE_TIME = 200;
             this.replaceActor.ease({
@@ -155,23 +156,23 @@ class TilingPreview {
         this.replaceActor.add_action(clickGesture);
 
         // modify the function of the close button
-        this.preview._deleteAll = function() {
-            // quit tiling
-        }
+        this.windowPreview._deleteAll = () => {
+            this.extension?.quitTiling();
+        };
 
         // diable dnd of a TilingPreview
-        this.preview._draggable._gestureRecognized = function() { /* do nothing */ }
+        this.windowPreview._draggable._gestureRecognized = function() { /* do nothing */ }
     }
 
     show () {
         const idx = global.workspace_manager.get_active_workspace_index();
         const workspace = Main.overview._overview._controls._workspacesDisplay._workspacesViews[0]._workspaces[idx];
-        const layoutManager = workspace._container.layout_manager;
+        this.layoutManager = workspace._container.layout_manager;
 
         // hook the size which used by layoutmanager, so that the preview shows
         // in the overview according to workarea size instead of metawindow size
         const workArea = Utils.getMonitorWorkarea();
-        Object.defineProperty(this.preview, 'boundingBox', {
+        Object.defineProperty(this.windowPreview, 'boundingBox', {
             get: function() {
                 return {
                     x: workArea.x,
@@ -183,22 +184,37 @@ class TilingPreview {
             configurable: true, // must be true for restoring
             enumerable: true
         });
-        layoutManager.addWindow(this.preview, this.metaWindows[0]);
+        this.layoutManager.addWindow(this.windowPreview, this.metaWindows[0]);
     }
 
     destroy() {
-        this.preview.disconnect(this.previewShowId);
+        this.windowPreview.disconnect(this.previewShowId);
         this.previewShowId = null;
-        this.preview._title.disconnect(this.previewShowChromeId);
+        this.windowPreview._title.disconnect(this.previewShowChromeId);
         this.previewShowChromeId = null;
-        this.preview._title.disconnect(this.previewHideChromeId);
+        this.windowPreview._title.disconnect(this.previewHideChromeId);
         this.previewHideChromeId = null;
+        this.replaceActor.hide();
         this.replaceActor.destroy();
         this.replaceActor = null;
-        this.preview._icon.destroy();
-        this.preview._icon = null;
-        this.preview.destroy();
-        this.preview = null;
+        this.windowPreview._icon.destroy();
+        this.windowPreview._icon = null;
+
+        // hide and remove from layout before destroying
+        this.windowPreview.hide();
+
+        if (this.layoutManager) {
+            this.layoutManager.removeWindow(this.windowPreview);
+        }
+
+        const parent = this.windowPreview.get_parent();
+        if (parent) {
+            parent.remove_child(this.windowPreview);
+        }
+
+        this.windowPreview.destroy();
+        this.windowPreview = null;
+        this.layoutManager = null;
     }
 }
 
@@ -485,7 +501,8 @@ export default class DragnTileExtension extends Extension {
                     if (!this.tilingPreview) {
                         this.tilingPreview = new TilingPreview(
                                 [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                PREVIEW_IMG);
+                                PREVIEW_IMG,
+                                this);
 
                     }
                     this.tilingPreview.show();
@@ -509,7 +526,8 @@ export default class DragnTileExtension extends Extension {
                     if (this.tilingPreview === undefined) {
                         this.tilingPreview = new TilingPreview(
                                 [Utils.getMetaWindow(this._targetId), Utils.getMetaWindow(this._dropId)],
-                                PREVIEW_IMG);
+                                PREVIEW_IMG,
+                                this);
                     }
                     this.tilingPreview.show();
                 }
@@ -544,6 +562,34 @@ export default class DragnTileExtension extends Extension {
 
         global.workspace_manager.disconnect(this.workspaceChangeId);
         this.workspaceChangeId = null;
+    }
+
+    quitTiling() {
+        if (this._tile === 'none' && !this.tilingPreview)
+            return;
+
+        this.unregisterWindowEvent();
+        if (this.relayoutId !== null) {
+            this._layoutManager.disconnect(this.relayoutId);
+            this.relayoutId = null;
+        }
+
+        this._layoutManager.restoreWindowRect(this._dropId);
+        this._layoutManager.restoreWindowRect(this._targetId);
+        this._layoutManager.clear();
+
+        this._tile = 'none';
+        this._tileTip.hide();
+        this._dropId = undefined;
+        this._targetId = undefined;
+
+        if (this._hiddenId) {
+            Main.overview.disconnect(this._hiddenId);
+            this._hiddenId = null;
+        }
+
+        this.tilingPreview?.destroy();
+        this.tilingPreview = null;
     }
 
     registerSettings() {
@@ -670,6 +716,7 @@ export default class DragnTileExtension extends Extension {
         this._layoutManager.relayout();
         // we only need to be notified once
         Main.overview.disconnect(this._hiddenId);
+        this._hiddenId = null;
     }
 
     checkQuitTile(triggerWindow) {
@@ -677,14 +724,7 @@ export default class DragnTileExtension extends Extension {
         const wf = triggerWindow.get_frame_rect();
         // it doesn't quit tiling
         if (wf.x === workarea.x || wf.y === workarea.y) return;
-        this.unregisterWindowEvent();
-        this._layoutManager.disconnect(this.relayoutId);
-        this.relayoutId = null;
-        this._layoutManager.restoreWindowRect(this._dropId);
-        this._layoutManager.restoreWindowRect(this._targetId);
-        this._layoutManager.clear();
-
-        this._tile = 'none';
+        this.quitTiling();
     }
 
     _onDragMotion(event) {
