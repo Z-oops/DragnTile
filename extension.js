@@ -377,8 +377,12 @@ class Utils {
     }
 
     static minimizeMetaWindows(excludes) {
+        const activeWorkspace = global.workspace_manager.get_active_workspace();
         global.get_window_actors().forEach(actor => {
-                if (!excludes.includes(actor.get_meta_window().get_id())) actor.get_meta_window().minimize();
+            const metaWindow = actor.get_meta_window();
+            if (!excludes.includes(metaWindow.get_id())
+                && metaWindow.get_workspace() === activeWorkspace)
+                metaWindow.minimize();
             });
     }
 
