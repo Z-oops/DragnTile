@@ -351,7 +351,7 @@ const TilingLayout = GObject.registerClass({
 
 class Utils {
     static log(...args) {
-        if (DragnTileExtension._debug) {
+        if (DragnTileExtension.debug) {
             console.log(...args);
         }
     }
@@ -454,6 +454,8 @@ class Utils {
 }
 
 export default class DragnTileExtension extends Extension {
+    static debug = false;
+
     enable() {
         ICON_IMG = this.dir.get_child('assets/icon.png').get_path();
 
@@ -600,10 +602,10 @@ export default class DragnTileExtension extends Extension {
         // Create a new GSettings object
         this._settings = this.getSettings();
 
-        this._debug = this._settings.get_value('debug');
+        DragnTileExtension.debug = this._settings.get_boolean('debug');
         // Watch for changes to a specific setting
         this._debugId = this._settings.connect('changed::debug', (settings, key) => {
-            this._debug = settings.get_value(key);
+            DragnTileExtension.debug = settings.get_boolean(key);
             console.log('DragnTileExtension.settings', `${key} = ${settings.get_value(key).print(true)}`);
         });
 
