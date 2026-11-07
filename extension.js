@@ -35,6 +35,8 @@ import { WindowPreview } from 'resource:///org/gnome/shell/ui/windowPreview.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_ANIMATION_TIME = 250;
+const CAPTURE_POLL_TIMEOUT_MS = 10000;
+const REQUIRED_STABLE_CAPTURE_SAMPLES = 3;
 const PREVIEW_IMG = GLib.build_filenamev([GLib.get_user_cache_dir(), `DragnTile.snapshot.png`]);
 let ICON_IMG = "";  // initialized in DragnTileExtension.enable
 
@@ -239,7 +241,8 @@ const TilingLayout = GObject.registerClass({
     }
 
     add(metaWindow) {
-        this._windows = this._windows.filter(win => win !== metaWindow);
+        if (this.isManaged(metaWindow))
+            return;
         this._windows.push(metaWindow);
     }
 
@@ -391,14 +394,6 @@ class Utils {
     }
 
     static async captureWorkArea() {
-        // wait for the window animation to complete and get the correct workarea size
-        await Utils.sleep(1000);
-        // TODO: it's better to wait for animation done other than sleep a fixed time
-
-        if (this.inCapture)
-            return Promise.reject("Already in capturing");
-        this.inCapture = true;
-
         try {
             const workArea = Utils.getMonitorWorkarea();
 
@@ -417,34 +412,76 @@ class Utils {
                     outputStream,
                     (obj, res) => {
                         try {
-                            outputStream.close(null);
-                            this.inCapture = false;
+                            screenshot.screenshot_area_finish(res);
                             resolve(PREVIEW_IMG);
                         } catch (e) {
-                            this.inCapture = false;
                             reject(e);
+                        } finally {
+                            outputStream.close(null);
                         }
                     }
                 );
-
-                // TODO: find a way to only capture tiled windows
-                // screenshot.screenshot_window(
-                //     true,
-                //     false,
-                //     outputStream,
-                //     (obj, res) => {
-                //         try {
-                //             outputStream.close(null);
-                //             resolve(savePath);
-                //         } catch (e) {
-                //             reject(e);
-                //         }
-                //     }
-                // );
             });
         } catch (err) {
             return Promise.reject("captureWorkArea failed");
         }
+    }
+
+    static cancelScheduledCapture() {
+        if (this.captureTimerId) {
+            Utils.tryDisconnect(this.captureTimerId);
+            this.captureTimerId = undefined;
+            this.captureInProgress = false;
+        }
+    }
+
+    static scheduleWorkAreaCapture(metaWindows) {
+        if (this.captureInProgress || this.captureTimerId) {
+            Utils.log('capture already in progress, skip scheduling', this.captureInProgress, this.captureTimerId);
+            return;
+        }
+        const windows = metaWindows?.filter(Boolean);
+        if (windows?.length !== 2) {
+            Utils.log('invalid number of windows, skip scheduling');
+            return;
+        }
+        this.captureInProgress = true;
+        const startedAt = GLib.get_monotonic_time();
+        let previousRects;
+        let stableSamples = 0;
+        this.captureTimerId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            500,
+            () => {
+                const elapsedMs = (GLib.get_monotonic_time() - startedAt) / 1000;
+                if (elapsedMs >= CAPTURE_POLL_TIMEOUT_MS) {
+                    this.captureTimerId = undefined;
+                    this.captureInProgress = false;
+                    return GLib.SOURCE_REMOVE;
+                }
+                if (Main.overview?.visible)
+                    return GLib.SOURCE_CONTINUE;
+
+                const rects = windows.map(window => {
+                    const {x, y, width, height} = window.get_frame_rect();
+                    return `${x},${y},${width},${height}`;
+                }).join('|');
+                if (rects === previousRects)
+                    stableSamples++;
+                else {
+                    previousRects = rects;
+                    stableSamples = 0;
+                }
+                if (stableSamples < REQUIRED_STABLE_CAPTURE_SAMPLES)
+                    return GLib.SOURCE_CONTINUE;
+
+                this.captureTimerId = undefined;
+                Utils.captureWorkArea()
+                    .catch(err => Utils.log('captureWorkArea failed:', err))
+                    .finally(() => { this.captureInProgress = false; Utils.log('captureWorkArea finished'); });
+                return GLib.SOURCE_REMOVE;
+            }
+        );
     }
 
     static tryDisconnect(id) {
@@ -477,6 +514,7 @@ export default class DragnTileExtension extends Extension {
 
         this._sizechangeId = new Map();
         this._positionChangeIds = new Map();
+        this._unmanagedIds = new Map();
         this._layoutManager = new TilingLayout();
 
         this.registerSettings();
@@ -484,7 +522,8 @@ export default class DragnTileExtension extends Extension {
         this._layoutManager.setGap(this._gap);
         this._layoutManager.setAround(this.around);
         this.relayoutId = this._layoutManager.connect('dragntile-relayout', () => {
-            Utils.captureWorkArea().catch(err => Utils.log('captureWorkArea failed.'));
+            Utils.log('DragnTileExtension.relayout');
+            Utils.scheduleWorkAreaCapture(this._layoutManager._windows.slice());
         });
 
         const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
@@ -502,7 +541,7 @@ export default class DragnTileExtension extends Extension {
             const shouldDestroyPreview = adj.value === ControlsState.HIDDEN;
             if (shouldAllocPreview) {
                 if (this._tile !== 'none'
-                    && Utils.getMetaWindow(this._targetId).get_workspace() === global.workspace_manager.get_active_workspace()) {
+                    && Utils.getMetaWindow(this._targetId)?.get_workspace() === global.workspace_manager.get_active_workspace()) {
                     // TODO: check if there is a leak
                     if (!this.tilingPreview) {
                         this.tilingPreview = new TilingPreview(
@@ -526,7 +565,7 @@ export default class DragnTileExtension extends Extension {
 
             const stateAdjustment = Main.overview._overview._controls._stateAdjustment;
             if (stateAdjustment.value === ControlsState.WINDOW_PICKER) {
-                if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId).get_workspace()
+                if (this._tile !== 'none' && (Utils.getMetaWindow(this._targetId)?.get_workspace()
                                                 === global.workspace_manager.get_active_workspace())) {
                     // TODO: check if there is a leak
                     if (this.tilingPreview === undefined) {
@@ -542,6 +581,8 @@ export default class DragnTileExtension extends Extension {
     }
 
     disable() {
+        Utils.cancelScheduledCapture();
+
         DND.removeDragMonitor(this._dragMonitor);
         this.unregisterWindowEvent();
         this.unregisterSettings();
@@ -574,12 +615,12 @@ export default class DragnTileExtension extends Extension {
         if (this._tile === 'none' && !this.tilingPreview)
             return;
 
+        Utils.cancelScheduledCapture();
         this.unregisterWindowEvent();
-        if (this.relayoutId !== null) {
-            this._layoutManager.disconnect(this.relayoutId);
-            this.relayoutId = null;
-        }
-
+        // if (this.relayoutId !== null) {
+        //     this._layoutManager.disconnect(this.relayoutId);
+        //     this.relayoutId = null;
+        // }
         this._layoutManager.restoreWindowRect(this._dropId);
         this._layoutManager.restoreWindowRect(this._targetId);
         this._layoutManager.clear();
@@ -693,6 +734,9 @@ export default class DragnTileExtension extends Extension {
         // change other windows' size after a window is changed
         this._sizechangeId.set(this._dropId, dropWindow.connect('size-changed', this.sizeChangedWindow.bind(this)));
         this._sizechangeId.set(this._targetId, targetWindow.connect('size-changed', this.sizeChangedWindow.bind(this)));
+        // close a tiled window should cancel the tiling session and destroy the preview immediately
+        this._unmanagedIds.set(this._dropId, dropWindow.connect('unmanaged', () => this.quitTiling()));
+        this._unmanagedIds.set(this._targetId, targetWindow.connect('unmanaged', () => this.quitTiling()));
     }
 
     unregisterWindowEvent() {
@@ -705,6 +749,11 @@ export default class DragnTileExtension extends Extension {
             Utils.getMetaWindow(key)?.disconnect(value);
         });
         this._sizechangeId.clear();
+
+        this._unmanagedIds.forEach((value, key, map) => {
+            Utils.getMetaWindow(key)?.disconnect(value);
+        });
+        this._unmanagedIds.clear();
     }
 
     enterTile() {
@@ -712,6 +761,7 @@ export default class DragnTileExtension extends Extension {
         const targetWindow = Utils.getMetaWindow(this._targetId);
         if (dropWindow === undefined || targetWindow === undefined) return;
 
+        this.unregisterWindowEvent();
         this._layoutManager.clear(false);
         this._layoutManager.add(dropWindow);
         this._layoutManager.add(targetWindow);
@@ -755,7 +805,8 @@ export default class DragnTileExtension extends Extension {
         Utils.log('DragnTileExtension.drag', source.get_name(),
             ', point', event.x, event.y,
             ', Preview', targetPreview?.get_name(),
-            ', tilemode', this._tile);
+            ', prev tilemode', this._tile,
+            ', tilemode', tile);
 
 
         if (tileChanged) {
