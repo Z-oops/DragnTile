@@ -53,7 +53,11 @@ class TilingPreview {
         const h = pixbuf.get_height();
 
         const imageContent = St.ImageContent.new_with_preferred_size(w, h);
-        const coglContext = Clutter.get_default_backend().get_cogl_context();
+        // GNOME 51 (Clutter 18) dropped Clutter.get_default_backend(); since
+        // then the Clutter.Context is reachable from any actor, e.g. the stage.
+        const coglContext = typeof global.stage.get_context === 'function'
+            ? global.stage.get_context().get_backend().get_cogl_context()
+            : Clutter.get_default_backend().get_cogl_context();
         imageContent.set_data(
             coglContext,
             pixbuf.get_pixels(),
