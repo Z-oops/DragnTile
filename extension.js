@@ -463,8 +463,10 @@ class Utils {
                     this.captureInProgress = false;
                     return GLib.SOURCE_REMOVE;
                 }
-                if (Main.overview?.visible)
+                if (Main.overview?.visible) {
+                    Utils.log('captureWorkArea waiting for overview to be hidden');
                     return GLib.SOURCE_CONTINUE;
+                }
 
                 const rects = windows.map(window => {
                     const {x, y, width, height} = window.get_frame_rect();
@@ -476,8 +478,10 @@ class Utils {
                     previousRects = rects;
                     stableSamples = 0;
                 }
-                if (stableSamples < REQUIRED_STABLE_CAPTURE_SAMPLES)
+                if (stableSamples < REQUIRED_STABLE_CAPTURE_SAMPLES) {
+                    Utils.log('captureWorkArea waiting for stable', stableSamples);
                     return GLib.SOURCE_CONTINUE;
+                }
 
                 this.captureTimerId = undefined;
                 Utils.captureWorkArea()
